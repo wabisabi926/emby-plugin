@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "coreclr",
+            "name": "Launch Emby Server",
+            "request": "launch",
+            "preLaunchTask": "build-and-copy",
+            "program": "${config:embyDir}/Emby.Server.dll",
+            "args": [
+                "-nointerface"
+            ],
+            "cwd": "${config:embyDir}"
+        }
+    ]
+}

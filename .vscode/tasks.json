@@ -1,0 +1,88 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build-and-copy",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "build",
+                "make-plugin-dir",
+                "copy-dll"
+            ]
+        },
+        {
+            "label": "build",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "build",
+                "${workspaceFolder}/${config:pluginName}.sln",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "silent"
+            },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "make-plugin-dir",
+            "type": "shell",
+            "command": "mkdir",
+            "windows": {
+                "command": "New-Item",
+                "args": [
+                    "-ItemType",
+                    "Directory",
+                    "-Force",
+                    "-Path",
+                    "${config:embyWindowsDataDir}/plugins/${config:pluginName}/"
+                ]
+            },
+            "linux": {
+                "args": [
+                    "-p",
+                    "${config:embyLinuxDataDir}/plugins/${config:pluginName}/"
+                ]
+            },
+            "osx": {
+                "args": [
+                    "-p",
+                    "${config:embyOsxDataDir}/plugins/${config:pluginName}/"
+                ]
+            }
+        },
+        {
+            "label": "copy-dll",
+            "type": "shell",
+            "windows": {
+                "command": "Copy-Item",
+                "args": [
+                    "-Path",
+                    "${workspaceFolder}/${config:pluginName}/bin/Debug/netstandard2.0/*",
+                    "-Destination",
+                    "${config:embyWindowsDataDir}/plugins/${config:pluginName}/",
+                    "-Recurse",
+                    "-Force"
+                ]
+            },
+            "linux": {
+                "command": "cp",
+                "args": [
+                    "-r",
+                    "${workspaceFolder}/${config:pluginName}/bin/Debug/netstandard2.0/*",
+                    "${config:embyLinuxDataDir}/plugins/${config:pluginName}/"
+                ]
+            },
+            "osx": {
+                "command": "cp",
+                "args": [
+                    "-r",
+                    "${workspaceFolder}/${config:pluginName}/bin/Debug/netstandard2.0/*",
+                    "${config:embyOsxDataDir}/plugins/${config:pluginName}/"
+                ]
+            }
+        }
+    ]
+}
