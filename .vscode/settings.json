@@ -3,5 +3,5 @@
     "embyWindowsDataDir": "${env:APPDATA}/Emby-Server/programdata",
     "embyLinuxDataDir": "${env:HOME}/.local/share/emby",
     "embyOsxDataDir": "${env:HOME}/Library/Application Support/Emby-Server",
-    "pluginName": "Emby.Plugin.Template"
+    "pluginName": "TheIntroDB"
 }

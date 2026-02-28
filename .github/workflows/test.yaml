@@ -25,7 +25,7 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore Emby.Plugin.Template.sln
+        run: dotnet restore TheIntroDB.sln
 
       - name: Build (Debug)
-        run: dotnet build Emby.Plugin.Template.sln --no-restore
+        run: dotnet build TheIntroDB.sln --no-restore

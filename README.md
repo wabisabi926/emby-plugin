@@ -1,3 +1,9 @@
+# TheIntroDB – Emby Plugin
+
+This plugin provides **TheIntroDB API** configuration and a client for [TheIntroDB](https://api.theintrodb.org) (intro/recap/credits/preview timestamps by TMDB ID). Emby does not have a built-in Media Segments API like Jellyfin, so this plugin does not add skip buttons by itself; it stores settings and exposes an API client for custom integrations or future Emby features.
+
+---
+
 # Emby Plugin (Template)
 
 Minimal Emby Server plugin skeleton. Built with .NET Standard 2.0 and [MediaBrowser.Server.Core](https://www.nuget.org/packages/MediaBrowser.Server.Core).
@@ -11,8 +17,8 @@ Minimal Emby Server plugin skeleton. Built with .NET Standard 2.0 and [MediaBrow
 
 ### Option 1: Use this repo as-is
 
-1. Customize `Emby.Plugin.Template/Plugin.cs`: set `Name` and a unique `Id` (GUID).
-2. Build: `dotnet build Emby.Plugin.Template.sln`
+1. Customize `TheIntroDB/Plugin.cs`: set `Name` and a unique `Id` (GUID).
+2. Build: `dotnet build TheIntroDB.sln`
 3. Copy the built DLL (and PDB if debugging) to your Emby plugin folder (e.g. `%AppData%\Emby-Server\programdata\plugins\` on Windows, or the `plugins` directory under your Emby data path).
 
 ### Option 2: Create a new plugin with the CLI template
@@ -31,11 +37,11 @@ Then open the new project, set `Name` and `Id` in the Plugin class, and build.
 
 ## Project layout
 
-- `Emby.Plugin.Template/` – Plugin project
+- `TheIntroDB/` – Plugin project
   - `Plugin.cs` – Main plugin class (Name, Id, config page registration)
   - `Configuration/PluginConfiguration.cs` – Config model
   - `Configuration/configPage.html` – Dashboard config page (embedded)
-- `Emby.Plugin.Template.sln` – Solution file
+- `TheIntroDB.sln` – Solution file
 - `Directory.Build.props` – Shared version and MSBuild settings
 - `.editorconfig` – Coding style and formatting
 - `.vscode/` – VS Code launch (run Emby with plugin), tasks (build-and-copy), settings (paths)
