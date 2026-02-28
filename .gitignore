@@ -6,3 +6,4 @@ obj/
 *.dll
 *.pdb
 !**/content/**/*.dll
+.DS_Store
