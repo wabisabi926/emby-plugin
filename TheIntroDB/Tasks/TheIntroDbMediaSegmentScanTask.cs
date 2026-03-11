@@ -57,13 +57,13 @@ namespace TheIntroDB.Tasks
                 var processed = 0;
 
                 await _segmentProvider.ScanLibraryAsync(
-                    (message, current, total) =>
+                    new Action<string, int, int>((message, current, total) =>
                     {
                         processed = current;
                         var percentComplete = total > 0 ? (double)current / total * 100 : 0;
                         progress.Report(percentComplete);
                         _logger.Info("{0} ({1}/{2})", message, current, total);
-                    },
+                    }),
                     cancellationToken).ConfigureAwait(false);
 
                 _logger.Info("TheIntroDB media segment scan completed successfully. Found {0} segments.", totalSegments);

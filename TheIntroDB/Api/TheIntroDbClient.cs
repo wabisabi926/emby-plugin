@@ -75,7 +75,7 @@ namespace TheIntroDB.Api
             }
             else
             {
-                _logger.Warning("No TMDB or IMDB ID provided for media lookup");
+                _logger.Warn("No TMDB or IMDB ID provided for media lookup");
                 return null;
             }
 
@@ -108,7 +108,7 @@ namespace TheIntroDB.Api
                     {
                         if (!response.IsSuccessStatusCode)
                         {
-                            _logger.Warning("API request failed with status: {0}", response.StatusCode);
+                            _logger.Warn("API request failed with status: {0}", response.StatusCode);
                             return null;
                         }
 
@@ -146,7 +146,7 @@ namespace TheIntroDB.Api
             CancellationToken cancellationToken)
         {
             var result = await GetMediaAsync(tmdbId, null, isMovie, season, episode, cancellationToken).ConfigureAwait(false);
-            return result is null ? string.Empty : JsonSerializer.Serialize(result);
+            return result is null ? string.Empty : JsonConvert.SerializeObject(result);
         }
 
         /// <summary>

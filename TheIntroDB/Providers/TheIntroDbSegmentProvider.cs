@@ -61,7 +61,7 @@ namespace TheIntroDB.Providers
 
             if (Plugin.Instance is null)
             {
-                _logger.Warning("Early exit: Plugin.Instance is null");
+                _logger.Warn("Early exit: Plugin.Instance is null");
                 return Array.Empty<MediaSegmentData>();
             }
 
@@ -70,7 +70,7 @@ namespace TheIntroDB.Providers
             var item = _libraryManager.GetItemById(itemId);
             if (item is null)
             {
-                _logger.Warning("Early exit: item not found for ItemId={0}", itemId);
+                _logger.Warn("Early exit: item not found for ItemId={0}", itemId);
                 return Array.Empty<MediaSegmentData>();
             }
 
@@ -99,13 +99,13 @@ namespace TheIntroDB.Providers
 
             if ((!tmdbId.HasValue || tmdbId.Value <= 0) && string.IsNullOrWhiteSpace(imdbId))
             {
-                _logger.Warning("Early exit: no TmdbId or ImdbId for {0}", item.Name);
+                _logger.Warn("Early exit: no TmdbId or ImdbId for {0}", item.Name);
                 return Array.Empty<MediaSegmentData>();
             }
 
             if (!isMovie && (!season.HasValue || !episode.HasValue))
             {
-                _logger.Warning("Early exit: TV episode missing season/episode for {0}", item.Name);
+                _logger.Warn("Early exit: TV episode missing season/episode for {0}", item.Name);
                 return Array.Empty<MediaSegmentData>();
             }
 
@@ -172,21 +172,27 @@ namespace TheIntroDB.Providers
         {
             _logger.Info("Starting library scan for TheIntroDB segments");
 
-            var items = _libraryManager.GetItemList(new InternalItemsQuery
+            // Get items synchronously to avoid delegate inference issues
+            var query = new InternalItemsQuery
             {
-                IncludeItemTypes = new[] { typeof(Movie).Name, typeof(Episode).Name },
+                IncludeItemTypes = new string[] { typeof(Movie).Name, typeof(Episode).Name },
                 IsVirtualItem = false,
                 Recursive = true
-            });
+            };
+
+            var itemsResult = _libraryManager.GetItemList(query);
+            var items = itemsResult ?? new BaseItem[0];
 
             var totalSegments = 0;
             var processed = 0;
-            var total = items.Count;
+            var total = items.Length;
 
-            foreach (var item in items)
+            for (int i = 0; i < items.Length; i++)
             {
                 if (cancellationToken.IsCancellationRequested)
                     break;
+
+                var item = items[i];
 
                 try
                 {
@@ -194,7 +200,10 @@ namespace TheIntroDB.Providers
                     totalSegments += segments.Count;
 
                     processed++;
-                    progress?.Invoke($"Processed {item.Name}: {segments.Count} segments found", processed, total);
+                    if (progress != null)
+                    {
+                        progress($"Processed {item.Name}: {segments.Count} segments found", processed, total);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -215,7 +224,7 @@ namespace TheIntroDB.Providers
 
             if (item.ProviderIds.TryGetValue("Tmdb", out var id) && !string.IsNullOrWhiteSpace(id))
             {
-                return int.TryParse(id, out var n) ? n : null;
+                return int.TryParse(id, out var n) ? (int?)n : null;
             }
 
             return null;
@@ -347,6 +356,31 @@ namespace TheIntroDB.Providers
             public void Warn(string message, params object[] paramList)
             {
                 _logger.Warn(message, paramList);
+            }
+
+            public void Debug(ReadOnlyMemory<char> message)
+            {
+                _logger.Debug(message.ToString());
+            }
+
+            public void Error(ReadOnlyMemory<char> message)
+            {
+                _logger.Error(message.ToString());
+            }
+
+            public void Info(ReadOnlyMemory<char> message)
+            {
+                _logger.Info(message.ToString());
+            }
+
+            public void Log(LogSeverity severity, ReadOnlyMemory<char> message)
+            {
+                _logger.Log(severity, message.ToString());
+            }
+
+            public void Warn(ReadOnlyMemory<char> message)
+            {
+                _logger.Warn(message.ToString());
             }
         }
     }
