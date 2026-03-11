@@ -1,59 +1,59 @@
 # TheIntroDB – Emby Plugin
 
-This plugin provides **TheIntroDB API** configuration and a client for [TheIntroDB](https://api.theintrodb.org) (intro/recap/credits/preview timestamps by TMDB ID). Emby does not have a built-in Media Segments API like Jellyfin, so this plugin does not add skip buttons by itself; it stores settings and exposes an API client for custom integrations or future Emby features.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/TheIntroDB/theintrodb-assets/main/logo-banner.png">
+</p>
+
+This plugin fetches intro, recap, credits, and preview timestamps from [TheIntroDB API](https://api.theintrodb.org) for your Emby library. It uses this data to enable intro skipping features in compatible Emby clients.
+
+**Requirements:** Emby Server 4.7+. **TMDb metadata is recommended** for best accuracy (IMDb works as a fallback but is less accurate for TV).
+
+**Important:** Segments are **not** fetched when you press play. They are populated when the **TheIntroDB Media Segment Scan** scheduled task runs. Until that task has run for your library, skip features may not be available.
 
 ---
 
-# Emby Plugin (Template)
+## Installation
 
-Minimal Emby Server plugin skeleton. Built with .NET Standard 2.0 and [MediaBrowser.Server.Core](https://www.nuget.org/packages/MediaBrowser.Server.Core).
+1. Download the latest plugin release from the [Releases](https://github.com/TheIntroDB/emby-plugin/releases) page.
+2. Extract the `TheIntroDB.dll` file from the downloaded zip.
+3. Place `TheIntroDB.dll` into your Emby plugins folder:
+   - **Linux:** `/var/lib/emby/plugins/`
+   - **Windows:** `C:\Users\{user}\AppData\Roaming\Emby-Server\plugins\`
+   - **macOS:** `~/.config/emby-server/plugins/` or `/Library/Application Support/Emby-Server/plugins`
+4. Restart Emby Server.
+5. Configure the plugin at **Dashboard → Plugins → TheIntroDB**.
+6. Run the scheduled task to populate data: **Dashboard → Scheduled Tasks → TheIntroDB Media Segment Scan** and click the **Play** button (▶).
 
-## Requirements
+### Metadata Requirements
 
-- [.NET SDK](https://dotnet.microsoft.com/download) (6.0+ for building; plugin targets netstandard2.0)
-- Emby Server for testing
+**TMDb is recommended.** The plugin matches content by TMDb ID for best accuracy. Ensure your libraries are configured to fetch TMDb IDs for your movies and shows.
 
-## Quick start
+IMDb IDs work as a fallback but are less accurate for TV episodes. The plugin will use whichever IDs are available on your items.
 
-### Option 1: Use this repo as-is
+## Configuration
 
-1. Customize `TheIntroDB/Plugin.cs`: set `Name` and a unique `Id` (GUID).
-2. Build: `dotnet build TheIntroDB.sln`
-3. Copy the built DLL (and PDB if debugging) to your Emby plugin folder (e.g. `%AppData%\Emby-Server\programdata\plugins\` on Windows, or the `plugins` directory under your Emby data path).
+TheIntroDB plugin includes some configuration options to adjust and improve your experience.
 
-### Option 2: Create a new plugin with the CLI template
+- **API Key**: You can enter your TheIntroDB API key to fetch your submissions even if they're still pending and prioritize yours in the averaging calculation.
+- **Segment Toggles**: (All enabled by default) You can disable each segment individually so they're not applied when fetching.
+- **Ignore Media That Already Has Segments**: (Enabled by default) Prevent refetching of media that already has segments. This is recommended for large libraries.
 
-From this repo (or after cloning it):
+---
+
+## Development
+
+### Prerequisites
+
+- [.NET 6.0 SDK](https://dotnet.microsoft.com/download/dotnet/6.0)
+
+### Build Commands
 
 ```bash
-# Install the dotnet template (path to the content folder)
-dotnet new -i ./dotnet-template/content
-
-# Create a new plugin (e.g. in a sibling directory or new folder)
-dotnet new Emby-plugin -n MyPlugin -o ../MyEmbyPlugin
+dotnet build
 ```
 
-Then open the new project, set `Name` and `Id` in the Plugin class, and build.
+### Quick Test Loop
 
-## Project layout
-
-- `TheIntroDB/` – Plugin project
-  - `Plugin.cs` – Main plugin class (Name, Id, config page registration)
-  - `Configuration/PluginConfiguration.cs` – Config model
-  - `Configuration/configPage.html` – Dashboard config page (embedded)
-- `TheIntroDB.sln` – Solution file
-- `Directory.Build.props` – Shared version and MSBuild settings
-- `.editorconfig` – Coding style and formatting
-- `.vscode/` – VS Code launch (run Emby with plugin), tasks (build-and-copy), settings (paths)
-- `.github/workflows/` – CI: build and test on push/PR
-- `dotnet-template/` – `dotnet new Emby-plugin` template
-
-### Debugging in VS Code
-
-1. Set paths in `.vscode/settings.json`: `embyDir` (server install, e.g. `.../Emby-Server/system`), `embyWindowsDataDir` / `embyLinuxDataDir` / `embyOsxDataDir` (Emby data directory).
-2. Use the **Launch Emby Server** configuration; it runs the build-and-copy task then starts Emby so you can attach breakpoints.
-
-## Docs
-
-- [Emby Plugin Development](https://dev.emby.media/doc/plugins/dev/index.html)
-- [Plugin templates (Emby SDK)](https://dev.emby.media/home/sdk/plugins/index.html)
+1. Build: `dotnet build`
+2. Copy the DLL: `cp TheIntroDB/bin/Debug/netstandard2.0/TheIntroDB.dll /var/lib/emby/plugins/` (adjust path for your OS)
+3. Restart Emby Server.
