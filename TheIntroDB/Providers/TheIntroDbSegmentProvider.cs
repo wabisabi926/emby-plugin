@@ -28,15 +28,13 @@ namespace TheIntroDB.Providers
         /// <summary>
         /// Initializes a new instance of the <see cref="TheIntroDbSegmentProvider"/> class.
         /// </summary>
-        /// <param name="httpClient">HTTP client for API requests.</param>
         /// <param name="libraryManager">Library manager to resolve items.</param>
         /// <param name="logger">Logger instance.</param>
         public TheIntroDbSegmentProvider(
-            HttpClient httpClient,
             ILibraryManager libraryManager,
             ILogger logger)
         {
-            _httpClient = httpClient;
+            _httpClient = new HttpClient();
             _libraryManager = libraryManager;
             _logger = logger;
             _logger.Info("TheIntroDB segment provider constructed");

@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Tasks;
-using TheIntroDB.Providers;
 
 namespace TheIntroDB.Tasks
 {
@@ -16,22 +15,18 @@ namespace TheIntroDB.Tasks
     {
         private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
-        private readonly TheIntroDbSegmentProvider _segmentProvider;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TheIntroDbMediaSegmentScanTask"/> class.
         /// </summary>
         /// <param name="libraryManager">Library manager</param>
         /// <param name="logger">Logger</param>
-        /// <param name="segmentProvider">Segment provider</param>
         public TheIntroDbMediaSegmentScanTask(
             ILibraryManager libraryManager,
-            ILogger logger,
-            TheIntroDbSegmentProvider segmentProvider)
+            ILogger logger)
         {
             _libraryManager = libraryManager;
             _logger = logger;
-            _segmentProvider = segmentProvider;
         }
 
         /// <inheritdoc />
@@ -56,7 +51,14 @@ namespace TheIntroDB.Tasks
                 var totalSegments = 0;
                 var processed = 0;
 
-                await _segmentProvider.ScanLibraryAsync(
+                var segmentProvider = Plugin.Instance?.SegmentProvider;
+                if (segmentProvider == null)
+                {
+                    _logger.Error("TheIntroDB segment provider is not available");
+                    return;
+                }
+
+                await segmentProvider.ScanLibraryAsync(
                     new Action<string, int, int>((message, current, total) =>
                     {
                         processed = current;
