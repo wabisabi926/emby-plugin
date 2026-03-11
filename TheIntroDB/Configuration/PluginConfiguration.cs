@@ -17,7 +17,7 @@ namespace TheIntroDB.Configuration
             EnableRecap = true;
             EnableCredits = true;
             EnablePreview = true;
-            IgnoreMediaWithExistingSegments = false;
+            IgnoreMediaWithExistingSegments = true;
         }
 
         /// <summary>
