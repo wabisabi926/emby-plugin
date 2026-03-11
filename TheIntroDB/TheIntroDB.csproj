@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <RootNamespace>Emby.Plugin.Template</RootNamespace>
+    <RootNamespace>TheIntroDB</RootNamespace>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <FileVersion>1.0.0.0</FileVersion>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
@@ -12,6 +12,8 @@
     <PackageReference Include="MediaBrowser.Server.Core" Version="4.9.1.90">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="System.Memory" Version="4.5.5" />
   </ItemGroup>
 
   <ItemGroup>
