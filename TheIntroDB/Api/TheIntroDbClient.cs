@@ -100,6 +100,7 @@ namespace TheIntroDB.Api
                 }
 
                 request.Headers.TryAddWithoutValidation("Accept", "application/json");
+                request.Headers.TryAddWithoutValidation("User-Agent", "TheIntroDB Emby Plugin");
 
                 try
                 {
