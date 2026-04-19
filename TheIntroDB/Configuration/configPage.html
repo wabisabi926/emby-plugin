@@ -12,7 +12,7 @@
                     <div class="sectionTitleContainer flex align-items-center">
                         <h2 class="sectionTitle">TheIntroDB</h2>
                     </div>
-                    <p class="fieldDescription">Segment data (intro, recap, credits, preview) is fetched from <a href="https://theintrodb.org" target="_blank" rel="noopener noreferrer">TheIntroDB API</a> using each item's TMDB or IMDB ID. Segments are stored for use with Emby's media processing features. Items need TMDB/IMDB IDs (e.g. from metadata) for the plugin to find segments.</p>
+                    <p class="fieldDescription">Segment data (intro, recap, credits, preview) is fetched from <a href="https://theintrodb.org" target="_blank" rel="noopener noreferrer">TheIntroDB API</a> using each item's TMDB or IMDB ID. Segments are <strong>not</strong> loaded when you press play; run <strong>Dashboard - Scheduled Tasks - TheIntroDB Media Segment Scan</strong> to populate them. Items need TMDB/IMDB IDs (e.g. from metadata) for the plugin to find segments.</p>
                     <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused" for="ApiKey">API key (optional)</label>
                         <input id="ApiKey" name="ApiKey" type="password" is="emby-input" autocomplete="off" />
@@ -23,7 +23,7 @@
                             <input id="EnableIntro" name="EnableIntro" type="checkbox" is="emby-checkbox" />
                             <span>Provide intro segments</span>
                         </label>
-                        <div class="fieldDescription">Include intro segments from TheIntroDB in media processing.</div>
+                        <div class="fieldDescription">Include intro segments from TheIntroDB in Emby media processing.</div>
                     </div>
                     <div class="checkboxContainer checkboxContainer-withDescription">
                         <label class="emby-checkbox-label">

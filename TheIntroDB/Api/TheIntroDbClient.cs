@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
-using TheIntroDB.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Logging;
 using Newtonsoft.Json;
+using TheIntroDB.Configuration;
 
 namespace TheIntroDB.Api
 {
@@ -59,42 +60,47 @@ namespace TheIntroDB.Api
             int? episode,
             CancellationToken cancellationToken)
         {
-            var config = _plugin?.Configuration as PluginConfiguration;
-            const string baseUrl = "https://api.theintrodb.org/v1";
-
-            // Build query parameters
-            var queryParams = new List<string>();
-
-            if (tmdbId.HasValue && tmdbId.Value > 0)
+            if (DateTime.UtcNow < Plugin.RateLimitExpiryUtc)
             {
-                queryParams.Add($"tmdb_id={tmdbId.Value}");
-            }
-            else if (!string.IsNullOrWhiteSpace(imdbId))
-            {
-                queryParams.Add($"imdb_id={imdbId}");
-            }
-            else
-            {
-                _logger.Warn("No TMDB or IMDB ID provided for media lookup");
+                _logger.Warn(
+                    "TheIntroDB API rate limit is currently active. Skipping request. The rate limit will reset at {0} UTC.",
+                    Plugin.RateLimitExpiryUtc);
                 return null;
             }
 
-            if (!isMovie)
+            var config = _plugin.Configuration ?? new PluginConfiguration();
+            const string baseUrl = "https://api.theintrodb.org/v2";
+
+            var tmdbIdValue = tmdbId.GetValueOrDefault();
+            var hasTmdb = tmdbIdValue > 0;
+            var hasImdb = !string.IsNullOrWhiteSpace(imdbId);
+
+            if (!hasTmdb && !hasImdb)
             {
-                if (season.HasValue)
-                    queryParams.Add($"season={season.Value}");
-                if (episode.HasValue)
-                    queryParams.Add($"episode={episode.Value}");
+                return null;
             }
 
-            var query = "?" + string.Join("&", queryParams);
-            var requestUri = new Uri(baseUrl + "/media" + query, UriKind.Absolute);
+            string query;
+            if (hasTmdb)
+            {
+                query = isMovie
+                    ? $"?tmdb_id={tmdbIdValue}"
+                    : $"?tmdb_id={tmdbIdValue}&season={season}&episode={episode}";
+            }
+            else
+            {
+                var encodedImdb = Uri.EscapeDataString(imdbId);
+                query = isMovie
+                    ? $"?imdb_id={encodedImdb}"
+                    : $"?imdb_id={encodedImdb}&season={season}&episode={episode}";
+            }
 
-            _logger.Info("Fetching media data from: {0}", requestUri);
+            var requestUri = new Uri(baseUrl + "/media" + query, UriKind.Absolute);
+            _logger.Info("TheIntroDB API request: {0}", requestUri);
 
             using (var request = new HttpRequestMessage(HttpMethod.Get, requestUri))
             {
-                if (!string.IsNullOrWhiteSpace(config?.ApiKey))
+                if (!string.IsNullOrWhiteSpace(config.ApiKey))
                 {
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ApiKey.Trim());
                 }
@@ -107,23 +113,47 @@ namespace TheIntroDB.Api
                     await WaitForRateLimitAsync(cancellationToken).ConfigureAwait(false);
                     using (var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
                     {
+                        _logger.Info("TheIntroDB API response: StatusCode={0} for {1}", response.StatusCode, requestUri);
+
+                        if ((int)response.StatusCode == 429)
+                        {
+                            var retryAfterSeconds = GetRetryAfterSeconds(response.Headers);
+                            Plugin.RateLimitExpiryUtc = DateTime.UtcNow.AddSeconds(retryAfterSeconds);
+                            _logger.Warn(
+                                "TheIntroDB API rate limit exceeded. Will not send requests until {0} UTC. Retry-after: {1}s",
+                                Plugin.RateLimitExpiryUtc,
+                                retryAfterSeconds);
+
+                            return null;
+                        }
+
                         if (!response.IsSuccessStatusCode)
                         {
-                            _logger.Warn("API request failed with status: {0}", response.StatusCode);
+                            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            if (!string.IsNullOrEmpty(body) && body.Length > 500)
+                            {
+                                body = body.Substring(0, 500) + "...";
+                            }
+
+                            _logger.Warn("TheIntroDB API error response body: {0}", string.IsNullOrEmpty(body) ? "(empty)" : body);
                             return null;
                         }
 
                         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                         var mediaResponse = JsonConvert.DeserializeObject<MediaResponse>(json);
+                        _logger.Debug(
+                            "TheIntroDB API parsed response: IntroCount={0}, RecapCount={1}, CreditsCount={2}, PreviewCount={3}",
+                            mediaResponse?.Intro?.Count ?? 0,
+                            mediaResponse?.Recap?.Count ?? 0,
+                            mediaResponse?.Credits?.Count ?? 0,
+                            mediaResponse?.Preview?.Count ?? 0);
 
-                        _logger.Info("Successfully retrieved media data for {0}: {1}",
-                            mediaResponse?.Type, mediaResponse?.TmdbId);
                         return mediaResponse;
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.ErrorException("Error fetching media data from TheIntroDB API", ex);
+                    _logger.ErrorException(string.Format("TheIntroDB API request failed for {0}", requestUri), ex);
                     return null;
                 }
             }
@@ -148,6 +178,38 @@ namespace TheIntroDB.Api
         {
             var result = await GetMediaAsync(tmdbId, null, isMovie, season, episode, cancellationToken).ConfigureAwait(false);
             return result is null ? string.Empty : JsonConvert.SerializeObject(result);
+        }
+
+        private static int GetRetryAfterSeconds(HttpResponseHeaders headers)
+        {
+            IEnumerable<string> usageResetValues;
+            if (headers.TryGetValues("X-UsageLimit-Reset", out usageResetValues))
+            {
+                var usageResetValue = usageResetValues.FirstOrDefault();
+                int usageResetSeconds;
+                if (int.TryParse(usageResetValue, out usageResetSeconds))
+                {
+                    return usageResetSeconds;
+                }
+            }
+
+            IEnumerable<string> rateResetValues;
+            if (headers.TryGetValues("X-RateLimit-Reset", out rateResetValues))
+            {
+                var rateResetValue = rateResetValues.FirstOrDefault();
+                int rateResetSeconds;
+                if (int.TryParse(rateResetValue, out rateResetSeconds))
+                {
+                    return rateResetSeconds;
+                }
+            }
+
+            if (headers.RetryAfter != null && headers.RetryAfter.Delta.HasValue)
+            {
+                return (int)headers.RetryAfter.Delta.Value.TotalSeconds;
+            }
+
+            return 300;
         }
 
         /// <summary>

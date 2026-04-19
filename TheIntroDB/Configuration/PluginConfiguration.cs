@@ -21,32 +21,34 @@ namespace TheIntroDB.Configuration
         }
 
         /// <summary>
-        /// Gets or sets the optional API key (Bearer token).
+        /// Gets or sets the optional API key for TheIntroDB (Bearer token).
+        /// When set, your pending and accepted submissions are weighted higher.
         /// </summary>
         public string ApiKey { get; set; }
 
         /// <summary>
-        /// Gets or sets a value indicating whether to use intro segments.
+        /// Gets or sets a value indicating whether to provide intro segments from TheIntroDB.
         /// </summary>
         public bool EnableIntro { get; set; }
 
         /// <summary>
-        /// Gets or sets a value indicating whether to use recap segments.
+        /// Gets or sets a value indicating whether to provide recap segments from TheIntroDB.
         /// </summary>
         public bool EnableRecap { get; set; }
 
         /// <summary>
-        /// Gets or sets a value indicating whether to use credits segments.
+        /// Gets or sets a value indicating whether to provide credits (outro) segments from TheIntroDB.
         /// </summary>
         public bool EnableCredits { get; set; }
 
         /// <summary>
-        /// Gets or sets a value indicating whether to use preview segments.
+        /// Gets or sets a value indicating whether to provide preview segments from TheIntroDB.
         /// </summary>
         public bool EnablePreview { get; set; }
 
         /// <summary>
-        /// Gets or sets a value indicating whether to ignore media that already has segments.
+        /// Gets or sets a value indicating whether to skip API requests for media that already has segments.
+        /// When enabled (default), items with existing segments are not refetched from TheIntroDB when the host exposes that state.
         /// </summary>
         public bool IgnoreMediaWithExistingSegments { get; set; }
     }

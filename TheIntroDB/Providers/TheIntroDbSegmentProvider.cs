@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
@@ -12,6 +10,7 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Logging;
 using TheIntroDB.Api;
 using TheIntroDB.Configuration;
+using TheIntroDB.Models;
 
 namespace TheIntroDB.Providers
 {
@@ -63,7 +62,12 @@ namespace TheIntroDB.Providers
                 return Array.Empty<MediaSegmentData>();
             }
 
-            var config = Plugin.Instance.Configuration;
+            var config = Plugin.Instance.Configuration as PluginConfiguration;
+            if (config is null)
+            {
+                _logger.Warn("Early exit: Plugin configuration is not PluginConfiguration");
+                return Array.Empty<MediaSegmentData>();
+            }
 
             var item = _libraryManager.GetItemById(itemId);
             if (item is null)
@@ -110,7 +114,7 @@ namespace TheIntroDB.Providers
             _logger.Info("Fetching from TheIntroDB API: tmdbId={0}, imdbId={1}, isMovie={2}, season={3}, episode={4}",
                 tmdbId, imdbId, isMovie, season, episode);
 
-            var client = new TheIntroDbClient(_httpClient, Plugin.Instance, new LoggerAdapter(_logger));
+            var client = new TheIntroDbClient(_httpClient, Plugin.Instance, _logger);
             var media = await client.GetMediaAsync(tmdbId, imdbId, isMovie, season, episode, cancellationToken).ConfigureAwait(false);
 
             if (media is null)
@@ -156,61 +160,6 @@ namespace TheIntroDB.Providers
             var supported = item is Episode || item is Movie;
             _logger.Debug("Supports({0}, {1}): {2}", item?.Name ?? "null", item?.GetType().Name ?? "null", supported);
             return supported;
-        }
-
-        /// <summary>
-        /// Scans all movies and episodes in the library for segment data.
-        /// </summary>
-        /// <param name="progress">Progress callback.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>Total number of segments found.</returns>
-        public async Task<int> ScanLibraryAsync(
-            Action<string, int, int> progress,
-            CancellationToken cancellationToken)
-        {
-            _logger.Info("Starting library scan for TheIntroDB segments");
-
-            // Get items synchronously to avoid delegate inference issues
-            var query = new InternalItemsQuery
-            {
-                IncludeItemTypes = new string[] { typeof(Movie).Name, typeof(Episode).Name },
-                IsVirtualItem = false,
-                Recursive = true
-            };
-
-            var itemsResult = _libraryManager.GetItemList(query);
-            var items = itemsResult ?? new BaseItem[0];
-
-            var totalSegments = 0;
-            var processed = 0;
-            var total = items.Length;
-
-            for (int i = 0; i < items.Length; i++)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                    break;
-
-                var item = items[i];
-
-                try
-                {
-                    var segments = await GetMediaSegmentsAsync(item.Id, cancellationToken).ConfigureAwait(false);
-                    totalSegments += segments.Count;
-
-                    processed++;
-                    if (progress != null)
-                    {
-                        progress($"Processed {item.Name}: {segments.Count} segments found", processed, total);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.ErrorException("Error processing item {0}: {1}", ex, item.Name, ex.Message);
-                }
-            }
-
-            _logger.Info("Library scan completed. Found {0} total segments in {1} items", totalSegments, processed);
-            return totalSegments;
         }
 
         private static int? GetTmdbId(BaseItem item)
@@ -292,171 +241,9 @@ namespace TheIntroDB.Providers
                     ItemId = itemId,
                     Type = type,
                     StartTicks = startTicks,
-                    EndTicks = endTicks,
-                    Confidence = stamp.Confidence,
-                    SubmissionCount = stamp.SubmissionCount
+                    EndTicks = endTicks
                 });
             }
         }
-
-        /// <summary>
-        /// Adapter to convert Emby's ILogger to ILogger<T> for TheIntroDbClient
-        /// </summary>
-        private class LoggerAdapter : ILogger
-        {
-            private readonly ILogger _logger;
-
-            public LoggerAdapter(ILogger logger)
-            {
-                _logger = logger;
-            }
-
-            public void Debug(string message, params object[] paramList)
-            {
-                _logger.Debug(message, paramList);
-            }
-
-            public void Error(string message, params object[] paramList)
-            {
-                _logger.Error(message, paramList);
-            }
-
-            public void ErrorException(string message, Exception exception, params object[] paramList)
-            {
-                _logger.ErrorException(message, exception, paramList);
-            }
-
-            public void Fatal(string message, params object[] paramList)
-            {
-                _logger.Fatal(message, paramList);
-            }
-
-            public void FatalException(string message, Exception exception, params object[] paramList)
-            {
-                _logger.FatalException(message, exception, paramList);
-            }
-
-            public void Info(string message, params object[] paramList)
-            {
-                _logger.Info(message, paramList);
-            }
-
-            public void Log(LogSeverity severity, string message, params object[] paramList)
-            {
-                _logger.Log(severity, message, paramList);
-            }
-
-            public void LogMultiline(string message, LogSeverity severity, StringBuilder additionalContent)
-            {
-                _logger.LogMultiline(message, severity, additionalContent);
-            }
-
-            public void Warn(string message, params object[] paramList)
-            {
-                _logger.Warn(message, paramList);
-            }
-
-            public void Debug(ReadOnlyMemory<char> message)
-            {
-                _logger.Debug(message.ToString());
-            }
-
-            public void Error(ReadOnlyMemory<char> message)
-            {
-                _logger.Error(message.ToString());
-            }
-
-            public void Info(ReadOnlyMemory<char> message)
-            {
-                _logger.Info(message.ToString());
-            }
-
-            public void Log(LogSeverity severity, ReadOnlyMemory<char> message)
-            {
-                _logger.Log(severity, message.ToString());
-            }
-
-            public void Warn(ReadOnlyMemory<char> message)
-            {
-                _logger.Warn(message.ToString());
-            }
-        }
-    }
-
-    /// <summary>
-    /// Represents media segment data for Emby
-    /// </summary>
-    public class MediaSegmentData
-    {
-        /// <summary>
-        /// The item ID this segment belongs to
-        /// </summary>
-        public Guid ItemId { get; set; }
-
-        /// <summary>
-        /// The type of segment (Intro, Recap, Credits, Preview)
-        /// </summary>
-        public MediaSegmentType Type { get; set; }
-
-        /// <summary>
-        /// Start time in ticks
-        /// </summary>
-        public long StartTicks { get; set; }
-
-        /// <summary>
-        /// End time in ticks
-        /// </summary>
-        public long EndTicks { get; set; }
-
-        /// <summary>
-        /// Confidence score from TheIntroDB
-        /// </summary>
-        public double? Confidence { get; set; }
-
-        /// <summary>
-        /// Number of submissions for this segment
-        /// </summary>
-        public int SubmissionCount { get; set; }
-
-        /// <summary>
-        /// Start time as TimeSpan
-        /// </summary>
-        public TimeSpan StartTime => TimeSpan.FromTicks(StartTicks);
-
-        /// <summary>
-        /// End time as TimeSpan
-        /// </summary>
-        public TimeSpan EndTime => TimeSpan.FromTicks(EndTicks);
-
-        /// <summary>
-        /// Duration of the segment
-        /// </summary>
-        public TimeSpan Duration => TimeSpan.FromTicks(EndTicks - StartTicks);
-    }
-
-    /// <summary>
-    /// Types of media segments supported by TheIntroDB
-    /// </summary>
-    public enum MediaSegmentType
-    {
-        /// <summary>
-        /// Intro/Opening sequence
-        /// </summary>
-        Intro,
-
-        /// <summary>
-        /// Recap of previous episodes
-        /// </summary>
-        Recap,
-
-        /// <summary>
-        /// Credits/Outro sequence
-        /// </summary>
-        Credits,
-
-        /// <summary>
-        /// Preview of next episode
-        /// </summary>
-        Preview
     }
 }

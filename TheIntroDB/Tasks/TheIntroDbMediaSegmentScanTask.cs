@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Tasks;
+using TheIntroDB.Providers;
+using TheIntroDB.Services;
 
 namespace TheIntroDB.Tasks
 {
@@ -13,8 +15,8 @@ namespace TheIntroDB.Tasks
     /// </summary>
     public class TheIntroDbMediaSegmentScanTask : IScheduledTask
     {
-        private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
+        private readonly TheIntroDbLibraryScanner _libraryScanner;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TheIntroDbMediaSegmentScanTask"/> class.
@@ -25,8 +27,9 @@ namespace TheIntroDB.Tasks
             ILibraryManager libraryManager,
             ILogger logger)
         {
-            _libraryManager = libraryManager;
             _logger = logger;
+            var segmentProvider = new TheIntroDbSegmentProvider(libraryManager, logger);
+            _libraryScanner = new TheIntroDbLibraryScanner(libraryManager, segmentProvider, logger);
         }
 
         /// <inheritdoc />
@@ -48,20 +51,15 @@ namespace TheIntroDB.Tasks
 
             try
             {
-                var totalSegments = 0;
-                var processed = 0;
-
-                var segmentProvider = Plugin.Instance?.SegmentProvider;
-                if (segmentProvider == null)
+                if (Plugin.Instance == null)
                 {
-                    _logger.Error("TheIntroDB segment provider is not available");
+                    _logger.Error("TheIntroDB plugin instance is not available");
                     return;
                 }
 
-                await segmentProvider.ScanLibraryAsync(
+                var totalSegments = await _libraryScanner.ScanLibraryAsync(
                     new Action<string, int, int>((message, current, total) =>
                     {
-                        processed = current;
                         var percentComplete = total > 0 ? (double)current / total * 100 : 0;
                         progress.Report(percentComplete);
                         _logger.Info("{0} ({1}/{2})", message, current, total);

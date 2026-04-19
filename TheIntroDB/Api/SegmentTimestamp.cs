@@ -1,4 +1,3 @@
-using System.Runtime.Serialization;
 using Newtonsoft.Json;
 
 namespace TheIntroDB.Api
@@ -19,18 +18,6 @@ namespace TheIntroDB.Api
         /// </summary>
         [JsonProperty("end_ms")]
         public long? EndMs { get; set; }
-
-        /// <summary>
-        /// Gets or sets the confidence score 0–1, or null.
-        /// </summary>
-        [JsonProperty("confidence")]
-        public double? Confidence { get; set; }
-
-        /// <summary>
-        /// Gets or sets the number of submissions used.
-        /// </summary>
-        [JsonProperty("submission_count")]
-        public int SubmissionCount { get; set; }
 
         /// <summary>
         /// Returns whether this segment has usable start and end (for intro/recap both required; for credits/preview start required).
