@@ -1,3 +1,6 @@
+# 🚧 WORK IN PROGRESS 🚧
+There is currently no Emby plugin avaliable for download. If you have experience developing for Emby, help is needed!
+
 # TheIntroDB – Emby Plugin
 
 <p align="center">
