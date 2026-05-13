@@ -3,8 +3,8 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <RootNamespace>TheIntroDB</RootNamespace>
-    <AssemblyVersion>0.1.0.0</AssemblyVersion>
-    <FileVersion>0.1.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <LangVersion>10.0</LangVersion>
   </PropertyGroup>
@@ -23,6 +23,7 @@
     <None Remove="Configuration\configPage.js" />
     <EmbeddedResource Include="Configuration\configPage.html" />
     <EmbeddedResource Include="Configuration\configPage.js" />
+    <EmbeddedResource Include="thumb.png" />
   </ItemGroup>
 
 </Project>

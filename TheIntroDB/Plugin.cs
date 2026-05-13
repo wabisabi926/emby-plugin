@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
+using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
 using TheIntroDB.Configuration;
@@ -12,7 +14,7 @@ namespace TheIntroDB
     /// <summary>
     /// The main plugin.
     /// </summary>
-    public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
+    public class Plugin : BasePlugin<PluginConfiguration>, IHasThumbImage, IHasWebPages
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="Plugin"/> class.
@@ -37,6 +39,14 @@ namespace TheIntroDB
         public static Plugin Instance { get; private set; }
 
         internal static DateTime RateLimitExpiryUtc { get; set; }
+
+        public ImageFormat ThumbImageFormat => ImageFormat.Png;
+
+        public Stream GetThumbImage()
+        {
+            var type = GetType();
+            return type.Assembly.GetManifestResourceStream(type.Namespace + ".thumb.png");
+        }
 
         /// <inheritdoc />
         public IEnumerable<PluginPageInfo> GetPages()
