@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -101,7 +102,10 @@ namespace TheIntroDB.Providers
 
             if ((!tmdbId.HasValue || tmdbId.Value <= 0) && string.IsNullOrWhiteSpace(imdbId))
             {
-                _logger.Warn("Early exit: no TmdbId or ImdbId for {0}", item.Name);
+                var providers = item.ProviderIds == null
+                    ? "(null)"
+                    : string.Join(",", item.ProviderIds.Select(kvp => kvp.Key + "=" + kvp.Value));
+                _logger.Warn("Early exit: no TmdbId or ImdbId for {0}. ProviderIds: {1}", item.Name, providers);
                 return Array.Empty<MediaSegmentData>();
             }
 

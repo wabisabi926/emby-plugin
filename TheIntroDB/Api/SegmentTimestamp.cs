@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace TheIntroDB.Api
 {
@@ -10,13 +10,13 @@ namespace TheIntroDB.Api
         /// <summary>
         /// Gets or sets the start time in milliseconds, or null if segment starts at beginning.
         /// </summary>
-        [JsonProperty("start_ms")]
+        [JsonPropertyName("start_ms")]
         public long? StartMs { get; set; }
 
         /// <summary>
         /// Gets or sets the end time in milliseconds, or null for end-of-media.
         /// </summary>
-        [JsonProperty("end_ms")]
+        [JsonPropertyName("end_ms")]
         public long? EndMs { get; set; }
 
         /// <summary>
@@ -26,17 +26,13 @@ namespace TheIntroDB.Api
         /// <returns>True if the segment has a valid range.</returns>
         public bool HasValidRange(bool endRequired)
         {
-            if (StartMs is null)
-            {
-                return false;
-            }
-
             if (endRequired)
             {
-                return EndMs.HasValue && EndMs.Value > (StartMs ?? 0);
+                var startMs = StartMs ?? 0;
+                return EndMs.HasValue && EndMs.Value > startMs;
             }
 
-            return true;
+            return StartMs.HasValue;
         }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Common.Configuration;
@@ -56,7 +57,8 @@ namespace TheIntroDB.Tasks
         /// <inheritdoc />
         public async Task Execute(CancellationToken cancellationToken, IProgress<double> progress)
         {
-            _logger.Info("Starting TheIntroDB media segment scan");
+            var v = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "(unknown)";
+            _logger.Info("Starting TheIntroDB media segment scan (assembly {0})", v);
 
             try
             {
@@ -65,6 +67,14 @@ namespace TheIntroDB.Tasks
                     _logger.Error("TheIntroDB plugin instance is not available");
                     return;
                 }
+
+                var config = Plugin.Instance.Configuration;
+                _logger.Info("TheIntroDB settings: Intro={0}, Recap={1}, Credits={2}, Preview={3}, IgnoreExisting={4}",
+                    config.EnableIntro,
+                    config.EnableRecap,
+                    config.EnableCredits,
+                    config.EnablePreview,
+                    config.IgnoreMediaWithExistingSegments);
 
                 var totalSegments = await _libraryScanner.ScanLibraryAsync(
                     new Action<string, int, int>((message, current, total) =>

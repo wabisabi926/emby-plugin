@@ -75,7 +75,7 @@ namespace TheIntroDB.Services
 
             var query = new InternalItemsQuery
             {
-                IncludeItemTypes = new[] { typeof(Movie).Name, typeof(Episode).Name },
+                IncludeItemTypes = new[] { "Movie", "Episode" },
                 Recursive = true
             };
 

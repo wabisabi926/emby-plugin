@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Logging;
-using Newtonsoft.Json;
 using TheIntroDB.Configuration;
 
 namespace TheIntroDB.Api
@@ -140,7 +140,20 @@ namespace TheIntroDB.Api
                         }
 
                         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                        var mediaResponse = JsonConvert.DeserializeObject<MediaResponse>(json);
+                        var mediaResponse = JsonSerializer.Deserialize<MediaResponse>(json, new JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+
+                        if (mediaResponse == null)
+                        {
+                            var body = json;
+                            if (!string.IsNullOrEmpty(body) && body.Length > 500)
+                            {
+                                body = body.Substring(0, 500) + "...";
+                            }
+                            _logger.Warn("TheIntroDB API deserialize returned null. Body: {0}", string.IsNullOrEmpty(body) ? "(empty)" : body);
+                        }
                         _logger.Debug(
                             "TheIntroDB API parsed response: IntroCount={0}, RecapCount={1}, CreditsCount={2}, PreviewCount={3}",
                             mediaResponse?.Intro?.Count ?? 0,
@@ -177,7 +190,7 @@ namespace TheIntroDB.Api
             CancellationToken cancellationToken)
         {
             var result = await GetMediaAsync(tmdbId, null, isMovie, season, episode, cancellationToken).ConfigureAwait(false);
-            return result is null ? string.Empty : JsonConvert.SerializeObject(result);
+            return result is null ? string.Empty : JsonSerializer.Serialize(result);
         }
 
         private static int GetRetryAfterSeconds(HttpResponseHeaders headers)
