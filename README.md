@@ -4,7 +4,7 @@
   <img src="https://raw.githubusercontent.com/TheIntroDB/theintrodb-assets/main/logo-banner.png">
 </p>
 
-This plugin fetches intro, recap, credits, and preview timestamps from [TheIntroDB API](https://api.theintrodb.org) for your Emby library. It uses this data to enable intro skipping features in compatible Emby clients.
+This plugin fetches intro, recap, credits, and preview timestamps from [TheIntroDB](https://theintrodb.org) for your Emby library. It uses this data to enable intro skipping features in compatible Emby clients.
 
 **Requirements:** Emby Server 4.7+. **TMDb metadata is recommended** for best accuracy (IMDb works as a fallback but is less accurate for TV).
 
