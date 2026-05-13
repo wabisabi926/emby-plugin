@@ -1,7 +1,10 @@
-name: '🚀 Publish Plugin'
+name: "Publish Plugin"
 
 permissions:
   contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
   release:
@@ -10,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Plugin version (e.g. 1.0.0.0 or v1.0.0.0)'
+        description: "Plugin version (e.g. 1.0.0.0 or v1.0.0.0)"
         required: true
         type: string
 
@@ -19,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
       artifact_name: ${{ steps.build.outputs.artifact_name }}
     steps:
       - name: Checkout Repository
@@ -28,6 +32,10 @@ jobs:
         id: version
         run: |
           RAW="${{ github.event.release.tag_name || github.event.inputs.version }}"
+          TAG="$RAW"
+          if [[ "$TAG" != v* ]]; then
+            TAG="v$TAG"
+          fi
           VERSION="${RAW#v}"
           # Ensure 4-part version (e.g. 1.0.0 -> 1.0.0.0)
           PARTS=$(echo "$VERSION" | tr '.' '\n' | wc -l)
@@ -35,6 +43,7 @@ jobs:
             VERSION="${VERSION}.0"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Using version: $VERSION"
 
       - name: Update plugin version in project files
@@ -68,7 +77,6 @@ jobs:
   upload:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
     steps:
       - name: Download Artifact
         uses: actions/download-artifact@v4
@@ -84,7 +92,10 @@ jobs:
           ls -l
 
       - name: Upload GH Release Assets
-        uses: shogo82148/actions-upload-release-asset@v1
+        uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: "./*"
+          tag_name: ${{ needs.build.outputs.tag }}
+          files: |
+            *.zip
+            *.md5
+          fail_on_unmatched_files: true
