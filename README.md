@@ -15,7 +15,7 @@ This plugin fetches intro, recap, credits, and preview timestamps from [TheIntro
 ## Installation
 
 1. Download the latest plugin release from the [Releases](https://github.com/TheIntroDB/emby-plugin/releases) page.
-2. Download the `TheIntroDB.dll` file.
+2. Extract the `TheIntroDB.dll` file from the downloaded zip.
 3. Place `TheIntroDB.dll` into your Emby plugins folder:
    - **Linux:** `/var/lib/emby/plugins/`
    - **Windows:** `C:\Users\{user}\AppData\Roaming\Emby-Server\plugins\`
@@ -37,6 +37,12 @@ TheIntroDB plugin includes some configuration options to adjust and improve your
 - **API Key**: You can enter your TheIntroDB API key to fetch your submissions even if they're still pending and prioritize yours in the averaging calculation.
 - **Segment Toggles**: (All enabled by default) You can disable each segment individually so they're not applied when fetching.
 - **Ignore Media That Already Has Segments**: (Enabled by default) Prevent refetching of media that already has segments. This is recommended for large libraries.
+
+---
+
+## Preview
+
+![Preview](preview.png)
 
 ---
 
