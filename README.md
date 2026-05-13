@@ -1,6 +1,3 @@
-# 🚧 WORK IN PROGRESS 🚧
-There is currently no Emby plugin avaliable for download. If you have experience developing for Emby, help is needed!
-
 # TheIntroDB – Emby Plugin
 
 <p align="center">
@@ -18,7 +15,7 @@ This plugin fetches intro, recap, credits, and preview timestamps from [TheIntro
 ## Installation
 
 1. Download the latest plugin release from the [Releases](https://github.com/TheIntroDB/emby-plugin/releases) page.
-2. Extract the `TheIntroDB.dll` file from the downloaded zip.
+2. Download the `TheIntroDB.dll` file.
 3. Place `TheIntroDB.dll` into your Emby plugins folder:
    - **Linux:** `/var/lib/emby/plugins/`
    - **Windows:** `C:\Users\{user}\AppData\Roaming\Emby-Server\plugins\`
