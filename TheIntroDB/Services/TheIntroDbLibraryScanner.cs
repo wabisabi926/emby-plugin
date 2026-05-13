@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
@@ -6,6 +8,9 @@ using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Logging;
+using TheIntroDB.Configuration;
+using TheIntroDB.Data;
+using TheIntroDB.Models;
 using TheIntroDB.Providers;
 
 namespace TheIntroDB.Services
@@ -18,6 +23,8 @@ namespace TheIntroDB.Services
         private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
         private readonly TheIntroDbSegmentProvider _segmentProvider;
+        private readonly TheIntroDbSegmentRepository _repository;
+        private readonly TheIntroDbChapterMarkerWriter _chapterMarkerWriter;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TheIntroDbLibraryScanner"/> class.
@@ -28,10 +35,14 @@ namespace TheIntroDB.Services
         public TheIntroDbLibraryScanner(
             ILibraryManager libraryManager,
             TheIntroDbSegmentProvider segmentProvider,
+            TheIntroDbSegmentRepository repository,
+            TheIntroDbChapterMarkerWriter chapterMarkerWriter,
             ILogger logger)
         {
             _libraryManager = libraryManager;
             _segmentProvider = segmentProvider;
+            _repository = repository;
+            _chapterMarkerWriter = chapterMarkerWriter;
             _logger = logger;
         }
 
@@ -46,6 +57,21 @@ namespace TheIntroDB.Services
             CancellationToken cancellationToken)
         {
             _logger.Info("Starting library scan for TheIntroDB segments");
+
+            var plugin = Plugin.Instance;
+            if (plugin == null)
+            {
+                _logger.Error("TheIntroDB plugin instance is not available");
+                return 0;
+            }
+
+            var config = plugin.Configuration;
+            var requestedTypes = GetRequestedTypes(config);
+            if (requestedTypes.Count == 0)
+            {
+                _logger.Info("TheIntroDB scan skipped: all segment types disabled in plugin settings");
+                return 0;
+            }
 
             var query = new InternalItemsQuery
             {
@@ -70,13 +96,45 @@ namespace TheIntroDB.Services
 
                 try
                 {
-                    var segments = await _segmentProvider.GetMediaSegmentsAsync(item.Id, cancellationToken).ConfigureAwait(false);
-                    totalSegments += segments.Count;
+                    config = plugin.Configuration;
+                    requestedTypes = GetRequestedTypes(config);
+                    if (requestedTypes.Count == 0)
+                    {
+                        processed++;
+                        continue;
+                    }
+
+                    IReadOnlyList<StoredMediaSegment> storedSegments;
+                    var usedCache = false;
+
+                    if (config.IgnoreMediaWithExistingSegments && _repository.HasAllSegmentTypes(item.InternalId, requestedTypes))
+                    {
+                        storedSegments = _repository.GetSegments(item.InternalId);
+                        usedCache = true;
+                    }
+                    else
+                    {
+                        var fetched = await _segmentProvider.GetMediaSegmentsAsync(item.Id, cancellationToken).ConfigureAwait(false);
+                        storedSegments = fetched.Select(s => new StoredMediaSegment
+                        {
+                            ItemInternalId = item.InternalId,
+                            Type = s.Type,
+                            StartTicks = s.StartTicks,
+                            EndTicks = s.EndTicks
+                        }).ToList();
+
+                        _repository.ReplaceSegments(item.InternalId, storedSegments, DateTime.UtcNow);
+                    }
+
+                    var inserted = _chapterMarkerWriter.ApplyMarkers(item, storedSegments, config);
+
+                    totalSegments += storedSegments.Count;
                     processed++;
 
                     if (progress != null)
                     {
-                        progress(string.Format("Processed {0}: {1} segments found", item.Name, segments.Count), processed, total);
+                        var mode = usedCache ? "cached" : "fetched";
+                        progress(string.Format("Processed {0}: {1} segments ({2}), {3} markers added", item.Name, storedSegments.Count, mode, inserted), processed, total);
                     }
                 }
                 catch (Exception ex)
@@ -87,6 +145,21 @@ namespace TheIntroDB.Services
 
             _logger.Info("Library scan completed. Found {0} total segments in {1} items", totalSegments, processed);
             return totalSegments;
+        }
+
+        private static HashSet<MediaSegmentType> GetRequestedTypes(PluginConfiguration config)
+        {
+            var set = new HashSet<MediaSegmentType>();
+            if (config == null)
+            {
+                return set;
+            }
+
+            if (config.EnableIntro) set.Add(MediaSegmentType.Intro);
+            if (config.EnableRecap) set.Add(MediaSegmentType.Recap);
+            if (config.EnableCredits) set.Add(MediaSegmentType.Credits);
+            if (config.EnablePreview) set.Add(MediaSegmentType.Preview);
+            return set;
         }
     }
 }

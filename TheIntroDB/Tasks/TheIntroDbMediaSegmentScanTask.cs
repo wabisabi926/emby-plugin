@@ -2,9 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Tasks;
+using TheIntroDB.Data;
 using TheIntroDB.Providers;
 using TheIntroDB.Services;
 
@@ -22,14 +25,20 @@ namespace TheIntroDB.Tasks
         /// Initializes a new instance of the <see cref="TheIntroDbMediaSegmentScanTask"/> class.
         /// </summary>
         /// <param name="libraryManager">Library manager</param>
-        /// <param name="logger">Logger</param>
+        /// <param name="itemRepository">Item repository for chapter markers</param>
+        /// <param name="applicationPaths">Application paths for DB storage</param>
+        /// <param name="logManager">Logger manager</param>
         public TheIntroDbMediaSegmentScanTask(
             ILibraryManager libraryManager,
-            ILogger logger)
+            IItemRepository itemRepository,
+            IApplicationPaths applicationPaths,
+            ILogManager logManager)
         {
-            _logger = logger;
-            var segmentProvider = new TheIntroDbSegmentProvider(libraryManager, logger);
-            _libraryScanner = new TheIntroDbLibraryScanner(libraryManager, segmentProvider, logger);
+            _logger = logManager.GetLogger("TheIntroDB");
+            var segmentProvider = new TheIntroDbSegmentProvider(libraryManager, _logger);
+            var repository = new TheIntroDbSegmentRepository(_logger, applicationPaths);
+            var chapterWriter = new TheIntroDbChapterMarkerWriter(itemRepository, _logger);
+            _libraryScanner = new TheIntroDbLibraryScanner(libraryManager, segmentProvider, repository, chapterWriter, _logger);
         }
 
         /// <inheritdoc />
