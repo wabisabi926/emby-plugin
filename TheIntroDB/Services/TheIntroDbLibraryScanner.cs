@@ -76,14 +76,20 @@ namespace TheIntroDB.Services
             var query = new InternalItemsQuery
             {
                 IncludeItemTypes = new[] { typeof(Movie).Name, typeof(Episode).Name },
-                IsVirtualItem = false,
                 Recursive = true
             };
 
-            var items = _libraryManager.GetItemList(query) ?? new BaseItem[0];
+            var items = _libraryManager.GetItemList(query) ?? Array.Empty<BaseItem>();
+            if (items.Length == 0)
+            {
+                _logger.Warn("TheIntroDB scan: no items returned for IncludeItemTypes query. Falling back to broad query and filtering.");
+                var fallback = _libraryManager.GetItemList(new InternalItemsQuery { Recursive = true }) ?? Array.Empty<BaseItem>();
+                items = fallback.Where(i => i is Episode || i is Movie).ToArray();
+            }
             var totalSegments = 0;
             var processed = 0;
             var total = items.Length;
+            _logger.Info("TheIntroDB scan: {0} items to process", total);
 
             for (var i = 0; i < items.Length; i++)
             {

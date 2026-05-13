@@ -91,7 +91,7 @@ namespace TheIntroDB.Providers
             }
             else if (item is Episode ep)
             {
-                tmdbId = GetTmdbId(ep.Series);
+                tmdbId = GetTmdbId(ep) ?? GetTmdbId(ep.Series);
                 imdbId = GetImdbId(ep) ?? GetImdbId(ep.Series);
                 season = ep.ParentIndexNumber;
                 episode = ep.IndexNumber;
@@ -169,7 +169,8 @@ namespace TheIntroDB.Providers
                 return null;
             }
 
-            if (item.ProviderIds.TryGetValue("Tmdb", out var id) && !string.IsNullOrWhiteSpace(id))
+            var id = GetProviderId(item, "Tmdb");
+            if (!string.IsNullOrWhiteSpace(id))
             {
                 return int.TryParse(id, out var n) ? (int?)n : null;
             }
@@ -184,9 +185,23 @@ namespace TheIntroDB.Providers
                 return null;
             }
 
-            if (item.ProviderIds.TryGetValue("Imdb", out var id) && !string.IsNullOrWhiteSpace(id))
+            var id = GetProviderId(item, "Imdb");
+            return string.IsNullOrWhiteSpace(id) ? null : id;
+        }
+
+        private static string GetProviderId(BaseItem item, string provider)
+        {
+            if (item?.ProviderIds is null || string.IsNullOrWhiteSpace(provider))
             {
-                return id;
+                return null;
+            }
+
+            foreach (var kvp in item.ProviderIds)
+            {
+                if (string.Equals(kvp.Key, provider, StringComparison.OrdinalIgnoreCase))
+                {
+                    return kvp.Value;
+                }
             }
 
             return null;
