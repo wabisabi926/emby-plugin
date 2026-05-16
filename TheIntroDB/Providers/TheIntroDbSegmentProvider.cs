@@ -150,6 +150,30 @@ namespace TheIntroDB.Providers
                 AddSegments(media.Preview, false, MediaSegmentType.Preview, itemId, runTimeTicks, segments);
             }
 
+            var introCount = segments.Count(s => s.Type == MediaSegmentType.Intro);
+            var recapCount = segments.Count(s => s.Type == MediaSegmentType.Recap);
+            var creditsCount = segments.Count(s => s.Type == MediaSegmentType.Credits);
+            var previewCount = segments.Count(s => s.Type == MediaSegmentType.Preview);
+            Plugin.TrackAnonymousUsageEvent(
+                "segments_generated",
+                new Dictionary<string, object>
+                {
+                    ["host"] = "emby",
+                    ["media_type"] = isMovie ? "movie" : "episode",
+                    ["has_tmdb"] = tmdbId.HasValue && tmdbId.Value > 0 ? 1 : 0,
+                    ["has_imdb"] = !string.IsNullOrWhiteSpace(imdbId) ? 1 : 0,
+                    ["segments_total"] = segments.Count,
+                    ["segments_intro"] = introCount,
+                    ["segments_recap"] = recapCount,
+                    ["segments_credits"] = creditsCount,
+                    ["segments_preview"] = previewCount,
+                    ["enable_intro"] = config.EnableIntro ? 1 : 0,
+                    ["enable_recap"] = config.EnableRecap ? 1 : 0,
+                    ["enable_credits"] = config.EnableCredits ? 1 : 0,
+                    ["enable_preview"] = config.EnablePreview ? 1 : 0,
+                    ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
+                });
+
             _logger.Info("Returning {0} segments for {1}", segments.Count, item.Name);
             return segments;
         }

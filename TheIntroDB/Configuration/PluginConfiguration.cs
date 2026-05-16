@@ -18,6 +18,7 @@ namespace TheIntroDB.Configuration
             EnableCredits = true;
             EnablePreview = true;
             IgnoreMediaWithExistingSegments = true;
+            EnableAnonymousUsageReporting = true;
         }
 
         /// <summary>
@@ -51,5 +52,10 @@ namespace TheIntroDB.Configuration
         /// When enabled (default), items with existing segments are not refetched from TheIntroDB when the host exposes that state.
         /// </summary>
         public bool IgnoreMediaWithExistingSegments { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether anonymous usage reporting is enabled.
+        /// </summary>
+        public bool EnableAnonymousUsageReporting { get; set; }
     }
 }

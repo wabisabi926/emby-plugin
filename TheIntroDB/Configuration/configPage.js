@@ -37,6 +37,7 @@ define(["loading", "emby-input", "emby-button", "emby-checkbox"],
                 setChecked(view, "#EnableCredits", config.EnableCredits, true);
                 setChecked(view, "#EnablePreview", config.EnablePreview, true);
                 setChecked(view, "#IgnoreMediaWithExistingSegments", config.IgnoreMediaWithExistingSegments, true);
+                setChecked(view, "#EnableAnonymousUsageReporting", config.EnableAnonymousUsageReporting, true);
                 Dashboard.hideLoadingMsg();
             }).catch(function() {
                 Dashboard.hideLoadingMsg();
@@ -52,6 +53,7 @@ define(["loading", "emby-input", "emby-button", "emby-checkbox"],
                 config.EnableCredits = getChecked(view, "#EnableCredits");
                 config.EnablePreview = getChecked(view, "#EnablePreview");
                 config.IgnoreMediaWithExistingSegments = getChecked(view, "#IgnoreMediaWithExistingSegments");
+                config.EnableAnonymousUsageReporting = getChecked(view, "#EnableAnonymousUsageReporting");
 
                 return ApiClient.updatePluginConfiguration(pluginId, config).then(function(result) {
                     Dashboard.processPluginConfigurationUpdateResult(result);
@@ -109,4 +111,3 @@ define(["loading", "emby-input", "emby-button", "emby-checkbox"],
             }
         };
     });
-

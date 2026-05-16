@@ -65,6 +65,17 @@ namespace TheIntroDB.Api
                 _logger.Warn(
                     "TheIntroDB API rate limit is currently active. Skipping request. The rate limit will reset at {0} UTC.",
                     Plugin.RateLimitExpiryUtc);
+                Plugin.TrackAnonymousUsageEvent(
+                    "theintrodb_api_media_fetch",
+                    new Dictionary<string, object>
+                    {
+                        ["host"] = "emby",
+                        ["result"] = "local_ratelimit_active",
+                        ["media_type"] = isMovie ? "movie" : "episode",
+                        ["has_tmdb"] = tmdbId.HasValue && tmdbId.Value > 0 ? 1 : 0,
+                        ["has_imdb"] = !string.IsNullOrWhiteSpace(imdbId) ? 1 : 0,
+                        ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(_plugin.Configuration?.ApiKey) ? 1 : 0
+                    });
                 return null;
             }
 
@@ -79,6 +90,18 @@ namespace TheIntroDB.Api
             {
                 return null;
             }
+
+            Plugin.TrackAnonymousUsageEvent(
+                "theintrodb_api_media_fetch",
+                new Dictionary<string, object>
+                {
+                    ["host"] = "emby",
+                    ["result"] = "request",
+                    ["media_type"] = isMovie ? "movie" : "episode",
+                    ["has_tmdb"] = hasTmdb ? 1 : 0,
+                    ["has_imdb"] = hasImdb ? 1 : 0,
+                    ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
+                });
 
             string query;
             if (hasTmdb)
@@ -124,6 +147,17 @@ namespace TheIntroDB.Api
                                 Plugin.RateLimitExpiryUtc,
                                 retryAfterSeconds);
 
+                            Plugin.TrackAnonymousUsageEvent(
+                                "theintrodb_api_media_fetch",
+                                new Dictionary<string, object>
+                                {
+                                    ["host"] = "emby",
+                                    ["result"] = "http_429",
+                                    ["media_type"] = isMovie ? "movie" : "episode",
+                                    ["has_tmdb"] = hasTmdb ? 1 : 0,
+                                    ["has_imdb"] = hasImdb ? 1 : 0,
+                                    ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
+                                });
                             return null;
                         }
 
@@ -136,6 +170,18 @@ namespace TheIntroDB.Api
                             }
 
                             _logger.Warn("TheIntroDB API error response body: {0}", string.IsNullOrEmpty(body) ? "(empty)" : body);
+                            Plugin.TrackAnonymousUsageEvent(
+                                "theintrodb_api_media_fetch",
+                                new Dictionary<string, object>
+                                {
+                                    ["host"] = "emby",
+                                    ["result"] = "http_error",
+                                    ["status"] = (int)response.StatusCode,
+                                    ["media_type"] = isMovie ? "movie" : "episode",
+                                    ["has_tmdb"] = hasTmdb ? 1 : 0,
+                                    ["has_imdb"] = hasImdb ? 1 : 0,
+                                    ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
+                                });
                             return null;
                         }
 
@@ -161,12 +207,39 @@ namespace TheIntroDB.Api
                             mediaResponse?.Credits?.Count ?? 0,
                             mediaResponse?.Preview?.Count ?? 0);
 
+                        Plugin.TrackAnonymousUsageEvent(
+                            "theintrodb_api_media_fetch",
+                            new Dictionary<string, object>
+                            {
+                                ["host"] = "emby",
+                                ["result"] = mediaResponse == null ? "success_null" : "success",
+                                ["media_type"] = isMovie ? "movie" : "episode",
+                                ["has_tmdb"] = hasTmdb ? 1 : 0,
+                                ["has_imdb"] = hasImdb ? 1 : 0,
+                                ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0,
+                                ["intro_count"] = mediaResponse?.Intro?.Count ?? 0,
+                                ["recap_count"] = mediaResponse?.Recap?.Count ?? 0,
+                                ["credits_count"] = mediaResponse?.Credits?.Count ?? 0,
+                                ["preview_count"] = mediaResponse?.Preview?.Count ?? 0
+                            });
+
                         return mediaResponse;
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.ErrorException(string.Format("TheIntroDB API request failed for {0}", requestUri), ex);
+                    Plugin.TrackAnonymousUsageEvent(
+                        "theintrodb_api_media_fetch",
+                        new Dictionary<string, object>
+                        {
+                            ["host"] = "emby",
+                            ["result"] = "exception",
+                            ["media_type"] = isMovie ? "movie" : "episode",
+                            ["has_tmdb"] = hasTmdb ? 1 : 0,
+                            ["has_imdb"] = hasImdb ? 1 : 0,
+                            ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
+                        });
                     return null;
                 }
             }

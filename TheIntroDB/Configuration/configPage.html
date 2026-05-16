@@ -61,6 +61,14 @@
                 <div class="fieldDescription">When enabled, items that already have segments are skipped to avoid refetching.</div>
             </div>
 
+            <div class="checkboxContainer checkboxContainer-withDescription">
+                <label class="emby-checkbox-label">
+                    <input id="EnableAnonymousUsageReporting" name="EnableAnonymousUsageReporting" type="checkbox" is="emby-checkbox" />
+                    <span>Enable anonymous usage reporting</span>
+                </label>
+                <div class="fieldDescription">When enabled, anonymous usage metrics may be collected to help improve the plugin.</div>
+            </div>
+
             <div class="verticalSection">
                 <h3 class="sectionTitle">Debug</h3>
                 <div class="inputContainer">
@@ -109,6 +117,7 @@
                     setChecked("#EnableCredits", config.EnableCredits, true);
                     setChecked("#EnablePreview", config.EnablePreview, true);
                     setChecked("#IgnoreMediaWithExistingSegments", config.IgnoreMediaWithExistingSegments, true);
+                    setChecked("#EnableAnonymousUsageReporting", config.EnableAnonymousUsageReporting, true);
                     Dashboard.hideLoadingMsg();
                 }, function() {
                     Dashboard.hideLoadingMsg();
@@ -125,6 +134,7 @@
                     config.EnableCredits = view.querySelector("#EnableCredits").checked;
                     config.EnablePreview = view.querySelector("#EnablePreview").checked;
                     config.IgnoreMediaWithExistingSegments = view.querySelector("#IgnoreMediaWithExistingSegments").checked;
+                    config.EnableAnonymousUsageReporting = view.querySelector("#EnableAnonymousUsageReporting").checked;
                     ApiClient.updatePluginConfiguration(pluginId, config).then(function(result) {
                         Dashboard.processPluginConfigurationUpdateResult(result);
                         Dashboard.hideLoadingMsg();
