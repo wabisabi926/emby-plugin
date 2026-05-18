@@ -37,7 +37,6 @@ namespace TheIntroDB
             : base(applicationPaths, xmlSerializer)
         {
             Instance = this;
-            AnonymousUsageReporter.TrackPluginLoaded(this);
         }
 
         /// <inheritdoc />
@@ -62,6 +61,17 @@ namespace TheIntroDB
             }
 
             AnonymousUsageReporter.TrackEvent(instance, eventName, props);
+        }
+
+        internal static void TrackAnonymousUsagePluginLoaded()
+        {
+            var instance = Instance;
+            if (instance == null)
+            {
+                return;
+            }
+
+            AnonymousUsageReporter.TrackPluginLoaded(instance);
         }
 
         public ImageFormat ThumbImageFormat => ImageFormat.Png;
@@ -256,16 +266,17 @@ namespace TheIntroDB
 
         public TheIntroDbUsageReportingEntryPoint(
             ISessionManager sessionManager,
-            TheIntroDbSegmentRepository repository,
+            IApplicationPaths applicationPaths,
             ILogManager logManager)
         {
             _sessionManager = sessionManager;
-            _repository = repository;
-            _logger = logManager.GetLogger(Plugin.Instance.Name);
+            _logger = logManager.GetLogger("TheIntroDB");
+            _repository = new TheIntroDbSegmentRepository(_logger, applicationPaths);
         }
 
         public void Run()
         {
+            Plugin.TrackAnonymousUsagePluginLoaded();
             _sessionManager.PlaybackProgress += SessionManager_PlaybackProgress;
             _sessionManager.PlaybackStopped += SessionManager_PlaybackStopped;
         }
@@ -274,6 +285,7 @@ namespace TheIntroDB
         {
             _sessionManager.PlaybackProgress -= SessionManager_PlaybackProgress;
             _sessionManager.PlaybackStopped -= SessionManager_PlaybackStopped;
+            _repository.Dispose();
         }
 
         private void SessionManager_PlaybackStopped(object sender, PlaybackStopEventArgs e)
