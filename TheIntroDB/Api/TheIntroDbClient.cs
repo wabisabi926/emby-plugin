@@ -58,6 +58,7 @@ namespace TheIntroDB.Api
             bool isMovie,
             int? season,
             int? episode,
+            long? durationMs,
             CancellationToken cancellationToken)
         {
             if (DateTime.UtcNow < Plugin.RateLimitExpiryUtc)
@@ -80,7 +81,7 @@ namespace TheIntroDB.Api
             }
 
             var config = _plugin.Configuration ?? new PluginConfiguration();
-            const string baseUrl = "https://api.theintrodb.org/v2";
+            const string baseUrl = "https://api.theintrodb.org/v3";
 
             var tmdbIdValue = tmdbId.GetValueOrDefault();
             var hasTmdb = tmdbIdValue > 0;
@@ -116,6 +117,11 @@ namespace TheIntroDB.Api
                 query = isMovie
                     ? $"?imdb_id={encodedImdb}"
                     : $"?imdb_id={encodedImdb}&season={season}&episode={episode}";
+            }
+
+            if (durationMs.HasValue && durationMs.Value > 0)
+            {
+                query += $"&duration_ms={durationMs.Value}";
             }
 
             var requestUri = new Uri(baseUrl + "/media" + query, UriKind.Absolute);
@@ -262,7 +268,7 @@ namespace TheIntroDB.Api
             int? episode,
             CancellationToken cancellationToken)
         {
-            var result = await GetMediaAsync(tmdbId, null, isMovie, season, episode, cancellationToken).ConfigureAwait(false);
+            var result = await GetMediaAsync(tmdbId, null, isMovie, season, episode, null, cancellationToken).ConfigureAwait(false);
             return result is null ? string.Empty : JsonSerializer.Serialize(result);
         }
 

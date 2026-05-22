@@ -119,7 +119,10 @@ namespace TheIntroDB.Providers
                 tmdbId, imdbId, isMovie, season, episode);
 
             var client = new TheIntroDbClient(_httpClient, Plugin.Instance, _logger);
-            var media = await client.GetMediaAsync(tmdbId, imdbId, isMovie, season, episode, cancellationToken).ConfigureAwait(false);
+            long? durationMs = item.RunTimeTicks.HasValue && item.RunTimeTicks.Value > 0
+                ? item.RunTimeTicks.Value / TimeSpan.TicksPerMillisecond
+                : (long?)null;
+            var media = await client.GetMediaAsync(tmdbId, imdbId, isMovie, season, episode, durationMs, cancellationToken).ConfigureAwait(false);
 
             if (media is null)
             {
