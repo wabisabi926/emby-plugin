@@ -30,45 +30,54 @@ namespace TheIntroDB.Services
 
             var existing = _itemRepository.GetChapters(item) ?? new List<ChapterInfo>();
             var chapters = new List<ChapterInfo>(existing.Count + segments.Count * 2);
+            chapters.AddRange(existing);
 
-            foreach (var c in existing)
-            {
-                chapters.Add(new ChapterInfo
-                {
-                    Name = c.Name,
-                    StartPositionTicks = c.StartPositionTicks,
-                    MarkerType = c.MarkerType
-                });
-            }
+            RemoveExistingTheIntroDbMarkers(chapters);
 
             var added = 0;
+            var durationTicks = item.RunTimeTicks.HasValue && item.RunTimeTicks.Value > 0 ? item.RunTimeTicks.Value : (long?)null;
 
             foreach (var s in segments.OrderBy(x => x.StartTicks))
             {
+                var startTicks = ClampTicks(s.StartTicks, durationTicks);
+                var endTicks = ClampTicks(s.EndTicks, durationTicks);
+                if (endTicks <= startTicks)
+                {
+                    endTicks = startTicks;
+                }
+
+                var normalized = new StoredMediaSegment
+                {
+                    ItemInternalId = s.ItemInternalId,
+                    Type = s.Type,
+                    StartTicks = startTicks,
+                    EndTicks = endTicks
+                };
+
                 switch (s.Type)
                 {
                     case MediaSegmentType.Intro:
                         if (config.EnableIntro)
                         {
-                            added += AddIntroMarkers(chapters, s);
+                            added += AddIntroMarkers(chapters, normalized);
                         }
                         break;
                     case MediaSegmentType.Recap:
                         if (config.EnableRecap)
                         {
-                            added += AddChapterRange(chapters, "Recap", "Recap End", s);
+                            added += AddChapterRange(chapters, "Recap", "Recap End", normalized);
                         }
                         break;
                     case MediaSegmentType.Credits:
                         if (config.EnableCredits)
                         {
-                            added += AddCreditsMarkers(chapters, s);
+                            added += AddCreditsMarkers(chapters, normalized);
                         }
                         break;
                     case MediaSegmentType.Preview:
                         if (config.EnablePreview)
                         {
-                            added += AddChapterRange(chapters, "Preview", "Preview End", s);
+                            added += AddChapterRange(chapters, "Preview", "Preview End", normalized);
                         }
                         break;
                 }
@@ -89,14 +98,12 @@ namespace TheIntroDB.Services
 
             if (s.StartTicks >= 0)
             {
-                added += AddIfMissing(chapters, MarkerType.IntroStart, s.StartTicks, "IntroStartMarker");
-                added += AddIfMissing(chapters, MarkerType.Chapter, s.StartTicks, "Intro");
+                added += AddIfMissing(chapters, MarkerType.IntroStart, s.StartTicks, "Intro");
             }
 
             if (s.EndTicks > s.StartTicks)
             {
-                added += AddIfMissing(chapters, MarkerType.IntroEnd, s.EndTicks, "IntroEndMarker");
-                added += AddIfMissing(chapters, MarkerType.Chapter, s.EndTicks, "Intro End");
+                added += AddIfMissing(chapters, MarkerType.IntroEnd, s.EndTicks, "Intro End");
             }
 
             return added;
@@ -108,8 +115,7 @@ namespace TheIntroDB.Services
 
             if (s.StartTicks >= 0)
             {
-                added += AddIfMissing(chapters, MarkerType.CreditsStart, s.StartTicks, "CreditsStartMarker");
-                added += AddIfMissing(chapters, MarkerType.Chapter, s.StartTicks, "Credits");
+                added += AddIfMissing(chapters, MarkerType.CreditsStart, s.StartTicks, "Credits");
             }
 
             return added;
@@ -148,6 +154,43 @@ namespace TheIntroDB.Services
             return 1;
         }
 
+        private static void RemoveExistingTheIntroDbMarkers(List<ChapterInfo> chapters)
+        {
+            if (chapters == null || chapters.Count == 0)
+            {
+                return;
+            }
+
+            chapters.RemoveAll(c =>
+                c.MarkerType == MarkerType.IntroStart ||
+                c.MarkerType == MarkerType.IntroEnd ||
+                c.MarkerType == MarkerType.CreditsStart ||
+                string.Equals(c.Name, "IntroStartMarker", StringComparison.Ordinal) ||
+                string.Equals(c.Name, "IntroEndMarker", StringComparison.Ordinal) ||
+                string.Equals(c.Name, "CreditsStartMarker", StringComparison.Ordinal));
+        }
+
+        private static long ClampTicks(long ticks, long? durationTicks)
+        {
+            if (ticks < 0)
+            {
+                return 0;
+            }
+
+            if (!durationTicks.HasValue || durationTicks.Value <= 0)
+            {
+                return ticks;
+            }
+
+            var max = durationTicks.Value - TimeSpan.TicksPerSecond;
+            if (max < 0)
+            {
+                max = 0;
+            }
+
+            return ticks > max ? max : ticks;
+        }
+
         private static List<ChapterInfo> Deduplicate(IEnumerable<ChapterInfo> chapters)
         {
             var list = new List<ChapterInfo>();
@@ -166,4 +209,3 @@ namespace TheIntroDB.Services
         }
     }
 }
-
