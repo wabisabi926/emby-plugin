@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -191,6 +192,8 @@ namespace TheIntroDB
                 using (var request = new HttpRequestMessage(HttpMethod.Post, requestUri))
                 {
                     request.Headers.TryAddWithoutValidation("App-Key", AppKey);
+                    request.Headers.UserAgent.Clear();
+                    request.Headers.UserAgent.Add(new ProductInfoHeaderValue("theintrodb-emby-plugin", version));
                     request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
                     using (var response = await HttpClient.SendAsync(request).ConfigureAwait(false))
