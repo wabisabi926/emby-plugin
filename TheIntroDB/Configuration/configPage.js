@@ -1,5 +1,5 @@
-define(["loading", "emby-input", "emby-button", "emby-checkbox"],
-    function(loading) {
+define(["emby-input", "emby-button", "emby-checkbox"],
+    function() {
         const pluginId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 
         function setChecked(view, selector, value, defaultValue) {
