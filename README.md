@@ -38,11 +38,26 @@ TheIntroDB plugin includes some configuration options to adjust and improve your
 - **Segment Toggles**: (All enabled by default) You can disable each segment individually so they're not applied when fetching.
 - **Ignore Media That Already Has Segments**: (Enabled by default) Prevent refetching of media that already has segments. This is recommended for large libraries.
 
+## Troubleshooting
+
+It's recommended to disable Emby's internal intro marker detection in **Dashboard → Library → select library → Advanced/options → Disable "Generate intro video markers"**.
+
+![Disable Intro Markers](images/disable-intro-markers.png)
+
+Thumbnail extraction is also recommended and can be done from **Dashboard → Library → select library → Advanced/options → Enable "Video preview thumbnails"**.
+
+![Enable Video Preview Thumbnails](images/video-preview-thumbnails.png)
+
+And by running the scheduled task again.
+
+![Run Scheduled Task](images/thumbnail-scan.png)
+
+
 ---
 
 ## Preview
 
-![Preview](preview.png)
+![Preview](images/preview.png)
 
 ---
 
