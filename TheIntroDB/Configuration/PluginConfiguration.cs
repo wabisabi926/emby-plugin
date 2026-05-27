@@ -12,6 +12,7 @@ namespace TheIntroDB.Configuration
         /// </summary>
         public PluginConfiguration()
         {
+            SchemaVersion = 1;
             ApiKey = string.Empty;
             EnableIntro = true;
             EnableRecap = true;
@@ -20,6 +21,8 @@ namespace TheIntroDB.Configuration
             IgnoreMediaWithExistingSegments = true;
             EnableAnonymousUsageReporting = true;
         }
+
+        public int SchemaVersion { get; set; }
 
         /// <summary>
         /// Gets or sets the optional API key for TheIntroDB (Bearer token).

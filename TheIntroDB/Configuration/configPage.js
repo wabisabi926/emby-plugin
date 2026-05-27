@@ -1,6 +1,6 @@
 define(["emby-input", "emby-button", "emby-checkbox"],
     function() {
-        const pluginId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+        const pluginId = "424b8e01-03d2-40a1-ba58-a2b9306f115d";
 
         function setChecked(view, selector, value, defaultValue) {
             const el = view.querySelector(selector);

@@ -51,7 +51,7 @@ namespace TheIntroDB
         public override string Name => "TheIntroDB";
 
         /// <inheritdoc />
-        public override Guid Id => Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+        public override Guid Id => Guid.Parse("424b8e01-03d2-40a1-ba58-a2b9306f115d");
 
         /// <summary>
         /// Gets the current plugin instance.
