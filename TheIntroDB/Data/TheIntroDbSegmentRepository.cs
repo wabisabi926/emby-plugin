@@ -47,6 +47,24 @@ namespace TheIntroDB.Data
             return types.All(stored.Contains);
         }
 
+        public bool HasAnySegments(long itemInternalId)
+        {
+            _lock.EnterReadLock();
+            try
+            {
+                var db = GetConnection();
+                using (var stmt = db.PrepareStatement("SELECT 1 FROM MediaSegments WHERE ItemInternalId=@ItemInternalId LIMIT 1"))
+                {
+                    BindInt64(stmt, "@ItemInternalId", itemInternalId);
+                    return stmt.MoveNext();
+                }
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+        }
+
         public HashSet<MediaSegmentType> GetStoredSegmentTypes(long itemInternalId)
         {
             _lock.EnterReadLock();

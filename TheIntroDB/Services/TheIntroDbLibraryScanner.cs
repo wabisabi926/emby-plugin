@@ -116,7 +116,7 @@ namespace TheIntroDB.Services
                     IReadOnlyList<StoredMediaSegment> storedSegments;
                     var usedCache = false;
 
-                    if (config.IgnoreMediaWithExistingSegments && _repository.HasAllSegmentTypes(item.InternalId, requestedTypes))
+                    if (config.IgnoreMediaWithExistingSegments && _repository.HasAnySegments(item.InternalId))
                     {
                         storedSegments = _repository.GetSegments(item.InternalId);
                         usedCache = true;

@@ -15,6 +15,8 @@ namespace TheIntroDB.Services
         private readonly IItemRepository _itemRepository;
         private readonly ILogger _logger;
 
+        private const string TheIntroDbTag = " (TheIntroDB)";
+
         public TheIntroDbChapterMarkerWriter(IItemRepository itemRepository, ILogger logger)
         {
             _itemRepository = itemRepository;
@@ -99,11 +101,13 @@ namespace TheIntroDB.Services
             if (s.StartTicks >= 0)
             {
                 added += AddIfMissing(chapters, MarkerType.IntroStart, s.StartTicks, "Intro");
+                added += AddIfMissing(chapters, MarkerType.Chapter, s.StartTicks, "Intro" + TheIntroDbTag);
             }
 
             if (s.EndTicks > s.StartTicks)
             {
                 added += AddIfMissing(chapters, MarkerType.IntroEnd, s.EndTicks, "Intro End");
+                added += AddIfMissing(chapters, MarkerType.Chapter, s.EndTicks, "Intro End" + TheIntroDbTag);
             }
 
             return added;
@@ -116,6 +120,7 @@ namespace TheIntroDB.Services
             if (s.StartTicks >= 0)
             {
                 added += AddIfMissing(chapters, MarkerType.CreditsStart, s.StartTicks, "Credits");
+                added += AddIfMissing(chapters, MarkerType.Chapter, s.StartTicks, "Credits" + TheIntroDbTag);
             }
 
             return added;
@@ -126,12 +131,12 @@ namespace TheIntroDB.Services
             var added = 0;
             if (s.StartTicks >= 0)
             {
-                added += AddIfMissing(chapters, MarkerType.Chapter, s.StartTicks, startName);
+                added += AddIfMissing(chapters, MarkerType.Chapter, s.StartTicks, startName + TheIntroDbTag);
             }
 
             if (s.EndTicks > s.StartTicks)
             {
-                added += AddIfMissing(chapters, MarkerType.Chapter, s.EndTicks, endName);
+                added += AddIfMissing(chapters, MarkerType.Chapter, s.EndTicks, endName + TheIntroDbTag);
             }
 
             return added;
@@ -165,6 +170,7 @@ namespace TheIntroDB.Services
                 c.MarkerType == MarkerType.IntroStart ||
                 c.MarkerType == MarkerType.IntroEnd ||
                 c.MarkerType == MarkerType.CreditsStart ||
+                (c.MarkerType == MarkerType.Chapter && c.Name != null && c.Name.EndsWith(TheIntroDbTag, StringComparison.Ordinal)) ||
                 string.Equals(c.Name, "IntroStartMarker", StringComparison.Ordinal) ||
                 string.Equals(c.Name, "IntroEndMarker", StringComparison.Ordinal) ||
                 string.Equals(c.Name, "CreditsStartMarker", StringComparison.Ordinal));
