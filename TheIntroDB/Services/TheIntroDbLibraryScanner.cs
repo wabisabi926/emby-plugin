@@ -65,6 +65,8 @@ namespace TheIntroDB.Services
                 return 0;
             }
 
+            plugin.EnsureConfigurationInitialized();
+
             var config = plugin.Configuration;
             var requestedTypes = GetRequestedTypes(config);
             if (requestedTypes.Count == 0)
@@ -102,6 +104,7 @@ namespace TheIntroDB.Services
 
                 try
                 {
+                    plugin.EnsureConfigurationInitialized();
                     config = plugin.Configuration;
                     requestedTypes = GetRequestedTypes(config);
                     if (requestedTypes.Count == 0)

@@ -63,6 +63,8 @@ namespace TheIntroDB.Providers
                 return Array.Empty<MediaSegmentData>();
             }
 
+            Plugin.Instance.EnsureConfigurationInitialized();
+
             var config = Plugin.Instance.Configuration as PluginConfiguration;
             if (config is null)
             {
@@ -114,6 +116,9 @@ namespace TheIntroDB.Providers
                 _logger.Warn("Early exit: TV episode missing season/episode for {0}", item.Name);
                 return Array.Empty<MediaSegmentData>();
             }
+
+            _logger.Debug("Segment toggles: EnableIntro={0}, EnableRecap={1}, EnableCredits={2}, EnablePreview={3}, IgnoreMediaWithExistingSegments={4}",
+                config.EnableIntro, config.EnableRecap, config.EnableCredits, config.EnablePreview, config.IgnoreMediaWithExistingSegments);
 
             _logger.Info("Fetching from TheIntroDB API: tmdbId={0}, imdbId={1}, isMovie={2}, season={3}, episode={4}",
                 tmdbId, imdbId, isMovie, season, episode);

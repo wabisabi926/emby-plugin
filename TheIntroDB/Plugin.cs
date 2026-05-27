@@ -60,6 +60,59 @@ namespace TheIntroDB
 
         internal static DateTime RateLimitExpiryUtc { get; set; }
 
+        internal void EnsureConfigurationInitialized()
+        {
+            PluginConfiguration config;
+            try
+            {
+                config = Configuration;
+            }
+            catch
+            {
+                return;
+            }
+
+            if (config == null)
+            {
+                return;
+            }
+
+            if (config.SchemaVersion > 0)
+            {
+                return;
+            }
+
+            if (config.EnableIntro || config.EnableRecap || config.EnableCredits || config.EnablePreview || config.IgnoreMediaWithExistingSegments || config.EnableAnonymousUsageReporting)
+            {
+                config.SchemaVersion = 1;
+                try
+                {
+                    SaveConfiguration();
+                }
+                catch
+                {
+                }
+                return;
+            }
+
+            config.SchemaVersion = 1;
+            config.ApiKey = config.ApiKey ?? string.Empty;
+            config.EnableIntro = true;
+            config.EnableRecap = true;
+            config.EnableCredits = true;
+            config.EnablePreview = true;
+            config.IgnoreMediaWithExistingSegments = true;
+            config.EnableAnonymousUsageReporting = true;
+
+            try
+            {
+                SaveConfiguration();
+            }
+            catch
+            {
+            }
+        }
+
         internal static void TrackAnonymousUsageEvent(string eventName, Dictionary<string, object> props)
         {
             var instance = Instance;
@@ -79,7 +132,21 @@ namespace TheIntroDB
                 return;
             }
 
-            AnonymousUsageReporter.TrackPluginLoaded(instance);
+            try
+            {
+                instance.EnsureConfigurationInitialized();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                AnonymousUsageReporter.TrackPluginLoaded(instance);
+            }
+            catch
+            {
+            }
         }
 
         public ImageFormat ThumbImageFormat => ImageFormat.Png;
@@ -119,7 +186,14 @@ namespace TheIntroDB
 
             public static void TrackPluginLoaded(Plugin plugin)
             {
-                var config = plugin == null ? null : plugin.Configuration;
+                PluginConfiguration config = null;
+                try
+                {
+                    config = plugin == null ? null : plugin.Configuration;
+                }
+                catch
+                {
+                }
                 TrackEvent(
                     plugin,
                     "plugin_loaded",
@@ -151,7 +225,14 @@ namespace TheIntroDB
 
             private static async Task TrackEventAsync(Plugin plugin, string eventName, Dictionary<string, object> props)
             {
-                var config = plugin?.Configuration;
+                PluginConfiguration config = null;
+                try
+                {
+                    config = plugin?.Configuration;
+                }
+                catch
+                {
+                }
                 if (config is null || !config.EnableAnonymousUsageReporting)
                 {
                     return;
@@ -286,7 +367,21 @@ namespace TheIntroDB
 
         public void Run()
         {
-            Plugin.TrackAnonymousUsagePluginLoaded();
+            _ = Task.Run(async () =>
+            {
+                for (var attempt = 0; attempt < 5; attempt++)
+                {
+                    try
+                    {
+                        Plugin.TrackAnonymousUsagePluginLoaded();
+                        return;
+                    }
+                    catch
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                    }
+                }
+            });
             _sessionManager.PlaybackProgress += SessionManager_PlaybackProgress;
             _sessionManager.PlaybackStopped += SessionManager_PlaybackStopped;
         }
