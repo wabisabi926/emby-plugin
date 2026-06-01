@@ -85,17 +85,43 @@ namespace TheIntroDB.Services {
         }) ?? Array.Empty < BaseItem > ();
         items = fallback.Where(i => i is Episode || i is Movie).ToArray();
       }
-      var totalSegments = 0;
-      var processed = 0;
-      var total = items.Length;
-      _logger.Info("TheIntroDB scan: {0} items to process", total);
 
-      for (var i = 0; i < items.Length; i++) {
+      // Pre-filter: when IgnoreMediaWithExistingSegments is enabled,
+      // fetch all item IDs that already have segments in ONE batch query
+      // and exclude them from the scan. This avoids thousands of
+      // individual HasAnySegments/GetSegments calls inside the loop.
+      BaseItem[] itemsToScan;
+      int cachedSegmentCount = 0;
+
+      if (config.IgnoreMediaWithExistingSegments)
+      {
+          var knownIds = _repository.GetAllSegmentedItemIds();
+          var knownSet = new HashSet<long>(knownIds);
+
+          itemsToScan = items
+              .Where(i => !knownSet.Contains(i.InternalId))
+              .ToArray();
+
+          cachedSegmentCount = knownIds.Count;
+
+          _logger.Info("TheIntroDB scan: {0} total items, {1} already have segments (cached), {2} items to scan",
+              items.Length, cachedSegmentCount, itemsToScan.Length);
+      }
+      else
+      {
+          itemsToScan = items;
+      }
+
+      var totalSegments = cachedSegmentCount;
+      var processed = 0;
+      var total = itemsToScan.Length;
+
+      for (var i = 0; i < itemsToScan.Length; i++) {
         if (cancellationToken.IsCancellationRequested) {
           break;
         }
 
-        var item = items[i];
+        var item = itemsToScan[i];
 
         try {
           plugin.EnsureConfigurationInitialized();
@@ -103,28 +129,6 @@ namespace TheIntroDB.Services {
           requestedTypes = GetRequestedTypes(config);
           if (requestedTypes.Count == 0) {
             processed++;
-            continue;
-          }
-
-          if (config.IgnoreMediaWithExistingSegments &&
-            _repository.HasAnySegments(item.InternalId)) {
-            // Item already has segments in local DB — skip both
-            // the API call AND the chapter marker rewrite, since
-            // markers were already applied during the initial scan.
-            var cachedSegments = _repository.GetSegments(item.InternalId);
-
-            // Only count segments for reporting; do NOT call
-            // ApplyMarkers again — it is expensive (reads/writes
-            // chapters for every item) and unnecessary when the
-            // item's segments haven't changed.
-            totalSegments += cachedSegments.Count;
-            processed++;
-
-            progress?.Invoke(string.Format(
-                "Processed {0}: {1} segments (cached, skipped marker update)",
-                item.Name, cachedSegments.Count),
-              processed, total);
-
             continue;
           }
 
@@ -151,11 +155,14 @@ namespace TheIntroDB.Services {
               item.Name, storedSegments.Count, inserted),
             processed, total);
         } catch (Exception ex) {
-          _logger.ErrorException(string.Format("Error processing item {0}", item.Name), ex);
+          _logger.ErrorException(string.Format(
+              "Error processing item {0}", item.Name), ex);
         }
       }
 
-      _logger.Info("Library scan completed. Found {0} total segments in {1} items", totalSegments, processed);
+      _logger.Info("Library scan completed. Found {0} total segments ({1} cached + {2} newly scanned) in {3} items",
+          totalSegments, cachedSegmentCount, totalSegments - cachedSegmentCount,
+          cachedSegmentCount + processed);
       return totalSegments;
     }
 

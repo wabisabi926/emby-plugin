@@ -122,6 +122,35 @@ namespace TheIntroDB.Data
             }
         }
 
+        /// <summary>
+        /// Returns the set of ItemInternalId values that already have
+        /// at least one segment stored in the database.
+        /// Used to pre-filter items before a scan when
+        /// IgnoreMediaWithExistingSegments is enabled.
+        /// </summary>
+        public IReadOnlyList<long> GetAllSegmentedItemIds()
+        {
+            _lock.EnterReadLock();
+            try
+            {
+                var ids = new List<long>();
+                var db = GetConnection();
+                using (var stmt = db.PrepareStatement("SELECT DISTINCT ItemInternalId FROM MediaSegments"))
+                {
+                    while (stmt.MoveNext())
+                    {
+                        var row = stmt.Current;
+                        ids.Add(row.GetInt64(0));
+                    }
+                }
+                return ids;
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+        }
+
         public void ReplaceSegments(long itemInternalId, IReadOnlyList<StoredMediaSegment> segments, DateTime updatedUtc)
         {
             _lock.EnterWriteLock();
