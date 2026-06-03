@@ -60,6 +60,7 @@ namespace TheIntroDB.Providers {
 
       Plugin.Instance.EnsureConfigurationInitialized();
 
+      // TODO: FIX Use pattern matching [TheIntroDB]csharp(IDE0019) and unused.
       var config = Plugin.Instance.Configuration as PluginConfiguration;
       if (config is null) {
         _logger.Warn("Early exit: Plugin configuration is not PluginConfiguration");
