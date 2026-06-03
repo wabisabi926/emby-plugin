@@ -86,6 +86,8 @@ namespace TheIntroDB.Services {
         items = fallback.Where(i => i is Episode || i is Movie).ToArray();
       }
 
+      items = FilterSelectedItems(items, config);
+
       // Pre-filter: when IgnoreMediaWithExistingSegments is enabled,
       // fetch all item IDs that already have segments in ONE batch query
       // and exclude them from the scan. This avoids thousands of
@@ -164,6 +166,103 @@ namespace TheIntroDB.Services {
           totalSegments, cachedSegmentCount, totalSegments - cachedSegmentCount,
           cachedSegmentCount + processed);
       return totalSegments;
+    }
+
+    private BaseItem[] FilterSelectedItems(BaseItem[] items, PluginConfiguration config) {
+      var selectedShowIds = GetSelectedShowIds(config);
+      var selectedLibraryIds = GetSelectedLibraryIds(config);
+      if (selectedShowIds.Count == 0 && selectedLibraryIds.Count == 0) {
+        return items;
+      }
+
+      var filteredItems = items.Where(item => {
+        if (IsItemInSelectedLibraries(item, selectedLibraryIds)) {
+          return true;
+        }
+
+        var episode = item as Episode;
+        return episode != null && IsEpisodeInSelectedShows(episode, selectedShowIds);
+      }).ToArray();
+
+      _logger.Info("TheIntroDB scan filter: {0} of {1} items match {2} selected shows and {3} selected libraries",
+        filteredItems.Length, items.Length, selectedShowIds.Count, selectedLibraryIds.Count);
+      return filteredItems;
+    }
+
+    private static HashSet<string> GetSelectedShowIds(PluginConfiguration config) {
+      var selectedShowIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+      if (config == null) {
+        return selectedShowIds;
+      }
+
+      if (!string.IsNullOrWhiteSpace(config.SelectedShowIds)) {
+        foreach (var selectedShowId in config.SelectedShowIds.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)) {
+          var normalizedSelectedShowId = NormalizeItemId(selectedShowId);
+          if (!string.IsNullOrWhiteSpace(normalizedSelectedShowId)) {
+            selectedShowIds.Add(normalizedSelectedShowId);
+          }
+        }
+      }
+
+      var legacySelectedShowId = NormalizeItemId(config.SelectedShowId);
+      if (!string.IsNullOrWhiteSpace(legacySelectedShowId)) {
+        selectedShowIds.Add(legacySelectedShowId);
+      }
+
+      return selectedShowIds;
+    }
+
+    private static HashSet<string> GetSelectedLibraryIds(PluginConfiguration config) {
+      var selectedLibraryIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+      if (config == null || string.IsNullOrWhiteSpace(config.SelectedLibraryIds)) {
+        return selectedLibraryIds;
+      }
+
+      foreach (var selectedLibraryId in config.SelectedLibraryIds.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)) {
+        var normalizedSelectedLibraryId = NormalizeItemId(selectedLibraryId);
+        if (!string.IsNullOrWhiteSpace(normalizedSelectedLibraryId)) {
+          selectedLibraryIds.Add(normalizedSelectedLibraryId);
+        }
+      }
+
+      return selectedLibraryIds;
+    }
+
+    private static bool IsEpisodeInSelectedShows(Episode episode, HashSet<string> selectedShowIds) {
+      if (episode == null || selectedShowIds.Count == 0 || episode.Series == null || episode.Series.InternalId <= 0) {
+        return false;
+      }
+
+      return selectedShowIds.Contains(episode.Series.InternalId.ToString());
+    }
+
+    private bool IsItemInSelectedLibraries(BaseItem item, HashSet<string> selectedLibraryIds) {
+      if (item == null || selectedLibraryIds.Count == 0 || item.InternalId <= 0) {
+        return false;
+      }
+
+      var selectedLibraryInternalIds = selectedLibraryIds
+        .Select(selectedLibraryId => {
+          long parsedId;
+          return long.TryParse(selectedLibraryId, out parsedId) ? parsedId : 0;
+        })
+        .Where(parsedId => parsedId > 0)
+        .ToArray();
+
+      if (selectedLibraryInternalIds.Length == 0) {
+        return false;
+      }
+
+      var matchingItems = _libraryManager.GetItemList(new InternalItemsQuery {
+        ItemIds = new[] { item.InternalId },
+        AncestorIds = selectedLibraryInternalIds
+      });
+
+      return matchingItems != null && matchingItems.Length > 0;
+    }
+
+    private static string NormalizeItemId(string selectedItemId) {
+      return string.IsNullOrWhiteSpace(selectedItemId) ? string.Empty : selectedItemId.Trim();
     }
 
     private static HashSet < MediaSegmentType > GetRequestedTypes(PluginConfiguration config) {

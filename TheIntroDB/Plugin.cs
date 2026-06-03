@@ -169,11 +169,6 @@ namespace TheIntroDB
                     EnableInMainMenu = true,
                     DisplayName = "TheIntroDB"
                 },
-                new PluginPageInfo
-                {
-                    Name = "TheIntroDBConfigurationPageJS",
-                    EmbeddedResourcePath = string.Format(CultureInfo.InvariantCulture, "{0}.Configuration.configPage.js", GetType().Namespace)
-                },
             };
         }
 

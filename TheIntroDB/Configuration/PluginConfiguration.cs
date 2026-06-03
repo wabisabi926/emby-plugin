@@ -14,6 +14,9 @@ namespace TheIntroDB.Configuration
         {
             SchemaVersion = 1;
             ApiKey = string.Empty;
+            SelectedShowId = string.Empty;
+            SelectedShowIds = string.Empty;
+            SelectedLibraryIds = string.Empty;
             EnableIntro = true;
             EnableRecap = true;
             EnableCredits = true;
@@ -29,6 +32,24 @@ namespace TheIntroDB.Configuration
         /// When set, your pending and accepted submissions are weighted higher.
         /// </summary>
         public string ApiKey { get; set; }
+
+        /// <summary>
+        /// Gets or sets the optional Emby series id to limit scans to a single show.
+        /// When empty, all supported media can be scanned.
+        /// </summary>
+        public string SelectedShowId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the optional comma-separated Emby series ids to limit scans to specific shows.
+        /// When empty, all supported media can be scanned.
+        /// </summary>
+        public string SelectedShowIds { get; set; }
+
+        /// <summary>
+        /// Gets or sets the optional comma-separated Emby library or folder ids to whitelist entire libraries.
+        /// When empty, no full-library whitelist is applied.
+        /// </summary>
+        public string SelectedLibraryIds { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether to provide intro segments from TheIntroDB.
