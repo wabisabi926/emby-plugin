@@ -79,6 +79,7 @@ namespace TheIntroDB.Providers
             }
 
             int? tmdbId = null;
+            int? tvdbId = null;
             string imdbId = null;
             bool isMovie = false;
             int? season = null;
@@ -88,25 +89,27 @@ namespace TheIntroDB.Providers
             {
                 isMovie = true;
                 tmdbId = GetTmdbId(movie);
+                tvdbId = GetTvdbId(movie);
                 imdbId = GetImdbId(movie);
-                _logger.Info("Movie: Name={0}, TmdbId={1}, ImdbId={2}", item.Name, tmdbId, imdbId ?? "(none)");
+                _logger.Info("Movie: Name={0}, TmdbId={1}, TvdbId={2}, ImdbId={3}", item.Name, tmdbId, tvdbId, imdbId ?? "(none)");
             }
             else if (item is Episode ep)
             {
                 tmdbId = GetTmdbId(ep) ?? GetTmdbId(ep.Series);
+                tvdbId = GetTvdbId(ep) ?? GetTvdbId(ep.Series);
                 imdbId = GetImdbId(ep) ?? GetImdbId(ep.Series);
                 season = ep.ParentIndexNumber;
                 episode = ep.IndexNumber;
-                _logger.Info("Episode: Name={0}, Series={1}, S{2}E{3}, TmdbId={4}, ImdbId={5}",
-                  item.Name, ep.SeriesName, season, episode, tmdbId, imdbId ?? "(none)");
+                _logger.Info("Episode: Name={0}, Series={1}, S{2}E{3}, TmdbId={4}, TvdbId={5}, ImdbId={6}",
+                  item.Name, ep.SeriesName, season, episode, tmdbId, tvdbId, imdbId ?? "(none)");
             }
 
-            if ((!tmdbId.HasValue || tmdbId.Value <= 0) && string.IsNullOrWhiteSpace(imdbId))
+            if ((!tmdbId.HasValue || tmdbId.Value <= 0) && (!tvdbId.HasValue || tvdbId.Value <= 0) && string.IsNullOrWhiteSpace(imdbId))
             {
                 var providers = item.ProviderIds == null ?
                   "(null)" :
                   string.Join(",", item.ProviderIds.Select(kvp => kvp.Key + "=" + kvp.Value));
-                _logger.Warn("Early exit: no TmdbId or ImdbId for {0}. ProviderIds: {1}", item.Name, providers);
+                _logger.Warn("Early exit: no TmdbId, TvdbId, or ImdbId for {0}. ProviderIds: {1}", item.Name, providers);
                 return Array.Empty<MediaSegmentData>();
             }
 
@@ -119,14 +122,14 @@ namespace TheIntroDB.Providers
             _logger.Debug("Segment toggles: EnableIntro={0}, EnableRecap={1}, EnableCredits={2}, EnablePreview={3}, IgnoreMediaWithExistingSegments={4}",
               config.EnableIntro, config.EnableRecap, config.EnableCredits, config.EnablePreview, config.IgnoreMediaWithExistingSegments);
 
-            _logger.Info("Fetching from TheIntroDB API: tmdbId={0}, imdbId={1}, isMovie={2}, season={3}, episode={4}",
-              tmdbId, imdbId, isMovie, season, episode);
+            _logger.Info("Fetching from TheIntroDB API: tmdbId={0}, tvdbId={1}, imdbId={2}, isMovie={3}, season={4}, episode={5}",
+              tmdbId, tvdbId, imdbId, isMovie, season, episode);
 
             var client = new TheIntroDbClient(_httpClient, Plugin.Instance, _logger);
             long? durationMs = item.RunTimeTicks.HasValue && item.RunTimeTicks.Value > 0 ?
               item.RunTimeTicks.Value / TimeSpan.TicksPerMillisecond :
               (long?)null;
-            var media = await client.GetMediaAsync(tmdbId, imdbId, isMovie, season, episode, durationMs, cancellationToken).ConfigureAwait(false);
+            var media = await client.GetMediaAsync(tmdbId, tvdbId, imdbId, isMovie, season, episode, durationMs, cancellationToken).ConfigureAwait(false);
 
             if (media is null)
             {
@@ -168,6 +171,7 @@ namespace TheIntroDB.Providers
                   ["host"] = "emby",
                   ["media_type"] = isMovie ? "movie" : "episode",
                   ["has_tmdb"] = tmdbId.HasValue && tmdbId.Value > 0 ? 1 : 0,
+                  ["has_tvdb"] = tvdbId.HasValue && tvdbId.Value > 0 ? 1 : 0,
                   ["has_imdb"] = !string.IsNullOrWhiteSpace(imdbId) ? 1 : 0,
                   ["segments_total"] = segments.Count,
                   ["segments_intro"] = introCount,
@@ -209,6 +213,22 @@ namespace TheIntroDB.Providers
             {
                 return int.TryParse(id, out
                   var n) ? (int?)n : null;
+            }
+
+            return null;
+        }
+
+        private static int? GetTvdbId(BaseItem item)
+        {
+            if (item?.ProviderIds is null)
+            {
+                return null;
+            }
+
+            var id = GetProviderId(item, "Tvdb");
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                return int.TryParse(id, out var n) ? (int?)n : null;
             }
 
             return null;

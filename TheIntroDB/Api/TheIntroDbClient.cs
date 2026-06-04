@@ -46,6 +46,7 @@ namespace TheIntroDB.Api
         /// Fetches media segment data for the given TMDB id (movie) or episode.
         /// </summary>
         /// <param name="tmdbId">TMDB ID of the movie or series.</param>
+        /// <param name="tvdbId">TVDB ID of the movie or series (optional fallback).</param>
         /// <param name="imdbId">IMDB ID of the movie or series (optional fallback).</param>
         /// <param name="isMovie">True for movie, false for TV episode.</param>
         /// <param name="season">Season number (required for TV).</param>
@@ -54,6 +55,7 @@ namespace TheIntroDB.Api
         /// <returns>MediaResponse object or null if not found or error.</returns>
         public async Task<MediaResponse> GetMediaAsync(
             int? tmdbId,
+            int? tvdbId,
             string imdbId,
             bool isMovie,
             int? season,
@@ -74,6 +76,7 @@ namespace TheIntroDB.Api
                         ["result"] = "local_ratelimit_active",
                         ["media_type"] = isMovie ? "movie" : "episode",
                         ["has_tmdb"] = tmdbId.HasValue && tmdbId.Value > 0 ? 1 : 0,
+                        ["has_tvdb"] = tvdbId.HasValue && tvdbId.Value > 0 ? 1 : 0,
                         ["has_imdb"] = !string.IsNullOrWhiteSpace(imdbId) ? 1 : 0,
                         ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(_plugin.Configuration?.ApiKey) ? 1 : 0
                     });
@@ -85,9 +88,11 @@ namespace TheIntroDB.Api
 
             var tmdbIdValue = tmdbId.GetValueOrDefault();
             var hasTmdb = tmdbIdValue > 0;
+            var tvdbIdValue = tvdbId.GetValueOrDefault();
+            var hasTvdb = tvdbIdValue > 0;
             var hasImdb = !string.IsNullOrWhiteSpace(imdbId);
 
-            if (!hasTmdb && !hasImdb)
+            if (!hasTmdb && !hasTvdb && !hasImdb)
             {
                 return null;
             }
@@ -100,6 +105,7 @@ namespace TheIntroDB.Api
                     ["result"] = "request",
                     ["media_type"] = isMovie ? "movie" : "episode",
                     ["has_tmdb"] = hasTmdb ? 1 : 0,
+                    ["has_tvdb"] = hasTvdb ? 1 : 0,
                     ["has_imdb"] = hasImdb ? 1 : 0,
                     ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
                 });
@@ -110,6 +116,12 @@ namespace TheIntroDB.Api
                 query = isMovie
                     ? $"?tmdb_id={tmdbIdValue}"
                     : $"?tmdb_id={tmdbIdValue}&season={season}&episode={episode}";
+            }
+            else if (hasTvdb)
+            {
+                query = isMovie
+                    ? $"?tvdb_id={tvdbIdValue}"
+                    : $"?tvdb_id={tvdbIdValue}&season={season}&episode={episode}";
             }
             else
             {
@@ -163,6 +175,7 @@ namespace TheIntroDB.Api
                                     ["result"] = "http_429",
                                     ["media_type"] = isMovie ? "movie" : "episode",
                                     ["has_tmdb"] = hasTmdb ? 1 : 0,
+                                    ["has_tvdb"] = hasTvdb ? 1 : 0,
                                     ["has_imdb"] = hasImdb ? 1 : 0,
                                     ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
                                 });
@@ -187,6 +200,7 @@ namespace TheIntroDB.Api
                                     ["status"] = (int)response.StatusCode,
                                     ["media_type"] = isMovie ? "movie" : "episode",
                                     ["has_tmdb"] = hasTmdb ? 1 : 0,
+                                    ["has_tvdb"] = hasTvdb ? 1 : 0,
                                     ["has_imdb"] = hasImdb ? 1 : 0,
                                     ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
                                 });
