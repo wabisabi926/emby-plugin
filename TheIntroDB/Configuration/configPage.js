@@ -516,7 +516,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 function getSelectedShowIdsFromConfig(config) {
                     var configuredShowIds = getConfiguredIdList(config.SelectedShowIds);
 
-                    if (config.SelectedShowId && isValidGuid(config.SelectedShowId)) {
+                    if (config.SelectedShowId) {
                         configuredShowIds.push(config.SelectedShowId);
                     }
 

@@ -181,6 +181,7 @@ namespace TheIntroDB.Services
         {
             var selectedLibraryIds = ParseCommaSeparatedIds(config.SelectedLibraryIds);
             var selectedShowIds = ParseCommaSeparatedIds(config.SelectedShowIds);
+
             bool hasLibraryFilter = selectedLibraryIds.Count > 0;
             bool hasShowFilter = selectedShowIds.Count > 0;
 
@@ -208,96 +209,47 @@ namespace TheIntroDB.Services
                 return allItems;
             }
 
-            // Parse library GUIDs
-            var libraryGuidSet = new HashSet<Guid>();
-            foreach (var id in selectedLibraryIds)
+            // Build string sets of configured IDs for O(1) lookup.
+            // IDs from the Emby API may be GUIDs or numeric InternalId strings;
+            // we compare against both Id.ToString() and InternalId.ToString().
+            var libraryIdSet = new HashSet<string>(selectedLibraryIds, StringComparer.OrdinalIgnoreCase);
+            var showIdSet = new HashSet<string>(selectedShowIds, StringComparer.OrdinalIgnoreCase);
+
+            var filteredItems = allItems.Where(item =>
             {
-                if (Guid.TryParse(id, out var g))
-                {
-                    libraryGuidSet.Add(g);
-                }
-                else
-                {
-                    _logger.Warn("TheIntroDB scan: invalid library GUID '{0}' in SelectedLibraryIds, skipping", id);
-                }
-            }
+                if (item == null) return false;
 
-            // Parse show IDs into series and movie sets
-            var seriesGuidSet = new HashSet<Guid>();
-            var movieGuidSet = new HashSet<Guid>();
-            foreach (var id in selectedShowIds)
-            {
-                if (!Guid.TryParse(id, out var g))
+                // Walk the parent chain to check membership
+                BaseItem current = item;
+                while (current != null)
                 {
-                    _logger.Warn("TheIntroDB scan: invalid GUID '{0}' in SelectedShowIds, skipping", id);
-                    continue;
-                }
-
-                var item = _libraryManager.GetItemById(g);
-                if (item is Series)
-                {
-                    seriesGuidSet.Add(g);
-                }
-                else if (item is Movie)
-                {
-                    movieGuidSet.Add(g);
-                }
-                else if (item != null)
-                {
-                    _logger.Warn("TheIntroDB scan: unexpected item type '{0}' in SelectedShowIds for '{1}', skipping", item.GetType().Name, item.Name);
-                }
-                else
-                {
-                    _logger.Warn("TheIntroDB scan: item not found for GUID '{0}' in SelectedShowIds, skipping", id);
-                }
-            }
-
-            // Determine which items pass the filter by climbing parent chain.
-            // For each item, walk up its parents and check if any ancestor
-            // matches a selected library, series, or if the item itself is a
-            // selected movie.
-            BaseItem[] filteredItems;
-
-            if (hasLibraryFilter || hasShowFilter)
-            {
-                filteredItems = allItems.Where(item =>
-                {
-                    if (item == null) return false;
-
-                    // Walk the parent chain to check membership
-                    BaseItem current = item;
-                    while (current != null)
-                    {
-                        if (hasLibraryFilter && libraryGuidSet.Contains(current.Id))
-                        {
-                            return true;
-                        }
-
-                        if (hasShowFilter)
-                        {
-                            // A series in the parent chain means this item is an episode of that series
-                            if (current is Series && seriesGuidSet.Contains(current.Id))
-                            {
-                                return true;
-                            }
-                        }
-
-                        current = current.GetParent();
-                    }
-
-                    // Also check if this item itself is a selected movie
-                    if (hasShowFilter && item is Movie && movieGuidSet.Contains(item.Id))
+                    if (hasLibraryFilter &&
+                        (libraryIdSet.Contains(current.Id.ToString()) ||
+                         libraryIdSet.Contains(current.InternalId.ToString())))
                     {
                         return true;
                     }
 
-                    return false;
-                }).ToArray();
-            }
-            else
-            {
-                filteredItems = allItems;
-            }
+                    if (hasShowFilter && current is Series &&
+                        (showIdSet.Contains(current.Id.ToString()) ||
+                         showIdSet.Contains(current.InternalId.ToString())))
+                    {
+                        return true;
+                    }
+
+                    current = current.GetParent();
+                }
+
+                // Also check if this item itself is a selected movie
+                if (hasShowFilter && item is Movie &&
+                    (showIdSet.Contains(item.Id.ToString()) ||
+                     showIdSet.Contains(item.InternalId.ToString())))
+                {
+                    return true;
+                }
+
+                return false;
+            }).ToArray();
 
             _logger.Info("TheIntroDB scan: {0} items after library/show filtering (from {1} total)", filteredItems.Length, allItems.Length);
             return filteredItems;
