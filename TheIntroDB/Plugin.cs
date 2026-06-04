@@ -10,15 +10,15 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Plugins;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
+using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Common.Configuration;
-using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Logging;
@@ -41,11 +41,15 @@ namespace TheIntroDB
         /// </summary>
         /// <param name="applicationPaths">Instance of the <see cref="IApplicationPaths"/> interface.</param>
         /// <param name="xmlSerializer">Instance of the <see cref="IXmlSerializer"/> interface.</param>
-        public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
+        /// <param name="logManager">Instance of the <see cref="ILogManager"/> interface.</param>
+        public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, ILogManager logManager)
             : base(applicationPaths, xmlSerializer)
         {
             Instance = this;
+            _logger = logManager.GetLogger("TheIntroDB");
         }
+
+        private readonly ILogger _logger;
 
         /// <inheritdoc />
         public override string Name => "TheIntroDB";
@@ -67,8 +71,9 @@ namespace TheIntroDB
             {
                 config = Configuration;
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.Debug("Failed to get plugin configuration: {0}", ex.Message);
                 return;
             }
 
@@ -89,8 +94,9 @@ namespace TheIntroDB
                 {
                     SaveConfiguration();
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _logger.Debug("Failed to save configuration (schema upgrade): {0}", ex.Message);
                 }
                 return;
             }
@@ -108,8 +114,9 @@ namespace TheIntroDB
             {
                 SaveConfiguration();
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.Debug("Failed to save initial configuration: {0}", ex.Message);
             }
         }
 
@@ -136,16 +143,18 @@ namespace TheIntroDB
             {
                 instance.EnsureConfigurationInitialized();
             }
-            catch
+            catch (Exception ex)
             {
+                instance._logger.Debug("EnsureConfigurationInitialized failed before tracking: {0}", ex.Message);
             }
 
             try
             {
                 AnonymousUsageReporter.TrackPluginLoaded(instance);
             }
-            catch
+            catch (Exception ex)
             {
+                instance._logger.Debug("TrackPluginLoaded failed: {0}", ex.Message);
             }
         }
 
@@ -189,10 +198,11 @@ namespace TheIntroDB
                 PluginConfiguration config = null;
                 try
                 {
-                    config = plugin == null ? null : plugin.Configuration;
+                    config = plugin?.Configuration;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    plugin?._logger.Debug("Failed to get config for plugin_loaded event: {0}", ex.Message);
                 }
                 TrackEvent(
                     plugin,
@@ -217,8 +227,9 @@ namespace TheIntroDB
                     {
                         await TrackEventAsync(plugin, eventName, props).ConfigureAwait(false);
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        plugin?._logger.Debug("TrackEventAsync failed: {0}", ex.Message);
                     }
                 });
             }
@@ -230,8 +241,9 @@ namespace TheIntroDB
                 {
                     config = plugin?.Configuration;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    plugin?._logger.Debug("Failed to get config in TrackEventAsync: {0}", ex.Message);
                 }
                 if (config is null || !config.EnableAnonymousUsageReporting)
                 {
@@ -376,8 +388,9 @@ namespace TheIntroDB
                         Plugin.TrackAnonymousUsagePluginLoaded();
                         return;
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        _logger.Debug("TrackAnonymousUsagePluginLoaded attempt {0}/5 failed: {1}", attempt + 1, ex.Message);
                         await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
                     }
                 }

@@ -253,27 +253,6 @@ namespace TheIntroDB.Api
             }
         }
 
-        /// <summary>
-        /// Fetches media segment timestamps for the given TMDB id (movie) or episode.
-        /// </summary>
-        /// <param name="tmdbId">TMDB ID of the movie or series.</param>
-        /// <param name="isMovie">True for movie, false for TV episode.</param>
-        /// <param name="season">Season number (required for TV).</param>
-        /// <param name="episode">Episode number (required for TV).</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>JSON string response or null if not found or error.</returns>
-        [Obsolete("Use GetMediaAsync instead")]
-        public async Task<string> GetMediaJsonAsync(
-            int tmdbId,
-            bool isMovie,
-            int? season,
-            int? episode,
-            CancellationToken cancellationToken)
-        {
-            var result = await GetMediaAsync(tmdbId, null, isMovie, season, episode, null, cancellationToken).ConfigureAwait(false);
-            return result is null ? string.Empty : JsonSerializer.Serialize(result);
-        }
-
         private static int GetRetryAfterSeconds(HttpResponseHeaders headers)
         {
             IEnumerable<string> usageResetValues;

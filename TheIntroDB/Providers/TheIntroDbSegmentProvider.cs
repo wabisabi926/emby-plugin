@@ -13,258 +13,295 @@ using TheIntroDB.Api;
 using TheIntroDB.Configuration;
 using TheIntroDB.Models;
 
-namespace TheIntroDB.Providers {
-  /// <summary>
-  /// Media segment provider that fetches intro/recap/credits/preview from TheIntroDB API.
-  /// This provider works with Emby's task system and can be used to populate segment data.
-  /// </summary>
-  public class TheIntroDbSegmentProvider {
-    private readonly HttpClient _httpClient;
-    private readonly ILibraryManager _libraryManager;
-    private readonly ILogger _logger;
-
+namespace TheIntroDB.Providers
+{
     /// <summary>
-    /// Initializes a new instance of the <see cref="TheIntroDbSegmentProvider"/> class.
+    /// Media segment provider that fetches intro/recap/credits/preview from TheIntroDB API.
+    /// This provider works with Emby's task system and can be used to populate segment data.
     /// </summary>
-    /// <param name="libraryManager">Library manager to resolve items.</param>
-    /// <param name="logger">Logger instance.</param>
-    public TheIntroDbSegmentProvider(
-      ILibraryManager libraryManager,
-      ILogger logger) {
-      _httpClient = new HttpClient();
-      _libraryManager = libraryManager;
-      _logger = logger;
-      _logger.Info("TheIntroDB segment provider constructed");
-    }
+    public class TheIntroDbSegmentProvider
+    {
+        private static readonly HttpClient _httpClient = new HttpClient();
+        private readonly ILibraryManager _libraryManager;
+        private readonly ILogger _logger;
 
-    /// <summary>
-    /// Gets the provider name.
-    /// </summary>
-    public string Name => Plugin.Instance?.Name ?? "TheIntroDB";
-
-    /// <summary>
-    /// Fetches segment data for a specific media item.
-    /// </summary>
-    /// <param name="itemId">The item ID to fetch segments for.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Collection of segment data or empty if not found.</returns>
-    public async Task < IReadOnlyList < MediaSegmentData >> GetMediaSegmentsAsync(
-      Guid itemId,
-      CancellationToken cancellationToken) {
-      _logger.Info("GetMediaSegmentsAsync called for ItemId={0}", itemId);
-
-      if (Plugin.Instance is null) {
-        _logger.Warn("Early exit: Plugin.Instance is null");
-        return Array.Empty < MediaSegmentData > ();
-      }
-
-      Plugin.Instance.EnsureConfigurationInitialized();
-
-      // TODO: FIX Use pattern matching [TheIntroDB]csharp(IDE0019) and unused.
-      var config = Plugin.Instance.Configuration as PluginConfiguration;
-      if (config is null) {
-        _logger.Warn("Early exit: Plugin configuration is not PluginConfiguration");
-        return Array.Empty < MediaSegmentData > ();
-      }
-
-      var item = _libraryManager.GetItemById(itemId);
-      if (item is null) {
-        _logger.Warn("Early exit: item not found for ItemId={0}", itemId);
-        return Array.Empty < MediaSegmentData > ();
-      }
-
-      int ? tmdbId = null;
-      string imdbId = null;
-      bool isMovie = false;
-      int ? season = null;
-      int ? episode = null;
-
-      if (item is Movie movie) {
-        isMovie = true;
-        tmdbId = GetTmdbId(movie);
-        imdbId = GetImdbId(movie);
-        _logger.Info("Movie: Name={0}, TmdbId={1}, ImdbId={2}", item.Name, tmdbId, imdbId ?? "(none)");
-      } else if (item is Episode ep) {
-        tmdbId = GetTmdbId(ep) ?? GetTmdbId(ep.Series);
-        imdbId = GetImdbId(ep) ?? GetImdbId(ep.Series);
-        season = ep.ParentIndexNumber;
-        episode = ep.IndexNumber;
-        _logger.Info("Episode: Name={0}, Series={1}, S{2}E{3}, TmdbId={4}, ImdbId={5}",
-          item.Name, ep.SeriesName, season, episode, tmdbId, imdbId ?? "(none)");
-      }
-
-      if ((!tmdbId.HasValue || tmdbId.Value <= 0) && string.IsNullOrWhiteSpace(imdbId)) {
-        var providers = item.ProviderIds == null ?
-          "(null)" :
-          string.Join(",", item.ProviderIds.Select(kvp => kvp.Key + "=" + kvp.Value));
-        _logger.Warn("Early exit: no TmdbId or ImdbId for {0}. ProviderIds: {1}", item.Name, providers);
-        return Array.Empty < MediaSegmentData > ();
-      }
-
-      if (!isMovie && (!season.HasValue || !episode.HasValue)) {
-        _logger.Warn("Early exit: TV episode missing season/episode for {0}", item.Name);
-        return Array.Empty < MediaSegmentData > ();
-      }
-
-      _logger.Debug("Segment toggles: EnableIntro={0}, EnableRecap={1}, EnableCredits={2}, EnablePreview={3}, IgnoreMediaWithExistingSegments={4}",
-        config.EnableIntro, config.EnableRecap, config.EnableCredits, config.EnablePreview, config.IgnoreMediaWithExistingSegments);
-
-      _logger.Info("Fetching from TheIntroDB API: tmdbId={0}, imdbId={1}, isMovie={2}, season={3}, episode={4}",
-        tmdbId, imdbId, isMovie, season, episode);
-
-      var client = new TheIntroDbClient(_httpClient, Plugin.Instance, _logger);
-      long ? durationMs = item.RunTimeTicks.HasValue && item.RunTimeTicks.Value > 0 ?
-        item.RunTimeTicks.Value / TimeSpan.TicksPerMillisecond :
-        (long ? ) null;
-      var media = await client.GetMediaAsync(tmdbId, imdbId, isMovie, season, episode, durationMs, cancellationToken).ConfigureAwait(false);
-
-      if (media is null) {
-        _logger.Info("TheIntroDB API returned no data for {0}", item.Name);
-        return Array.Empty < MediaSegmentData > ();
-      }
-
-      long ? runTimeTicks = item.RunTimeTicks;
-      var segments = new List < MediaSegmentData > ();
-
-      if (config.EnableIntro) {
-        AddSegments(media.Intro, true, MediaSegmentType.Intro, itemId, runTimeTicks, segments);
-      }
-
-      if (config.EnableRecap) {
-        AddSegments(media.Recap, true, MediaSegmentType.Recap, itemId, runTimeTicks, segments);
-      }
-
-      if (config.EnableCredits) {
-        AddSegments(media.Credits, false, MediaSegmentType.Credits, itemId, runTimeTicks, segments);
-      }
-
-      if (config.EnablePreview) {
-        AddSegments(media.Preview, false, MediaSegmentType.Preview, itemId, runTimeTicks, segments);
-      }
-
-      var introCount = segments.Count(s => s.Type == MediaSegmentType.Intro);
-      var recapCount = segments.Count(s => s.Type == MediaSegmentType.Recap);
-      var creditsCount = segments.Count(s => s.Type == MediaSegmentType.Credits);
-      var previewCount = segments.Count(s => s.Type == MediaSegmentType.Preview);
-      Plugin.TrackAnonymousUsageEvent(
-        "segments_generated",
-        new Dictionary < string, object > {
-          ["host"] = "emby",
-          ["media_type"] = isMovie ? "movie" : "episode",
-          ["has_tmdb"] = tmdbId.HasValue && tmdbId.Value > 0 ? 1 : 0,
-          ["has_imdb"] = !string.IsNullOrWhiteSpace(imdbId) ? 1 : 0,
-          ["segments_total"] = segments.Count,
-          ["segments_intro"] = introCount,
-          ["segments_recap"] = recapCount,
-          ["segments_credits"] = creditsCount,
-          ["segments_preview"] = previewCount,
-          ["enable_intro"] = config.EnableIntro ? 1 : 0,
-          ["enable_recap"] = config.EnableRecap ? 1 : 0,
-          ["enable_credits"] = config.EnableCredits ? 1 : 0,
-          ["enable_preview"] = config.EnablePreview ? 1 : 0,
-          ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
-        });
-
-      _logger.Info("Returning {0} segments for {1}", segments.Count, item.Name);
-      return segments;
-    }
-
-    /// <summary>
-    /// Checks if the provider supports the given item type.
-    /// </summary>
-    /// <param name="item">The media item to check.</param>
-    /// <returns>True if the item is supported (Movie or Episode).</returns>
-    public bool Supports(BaseItem item) {
-      var supported = item is Episode || item is Movie;
-      _logger.Debug("Supports({0}, {1}): {2}", item?.Name ?? "null", item?.GetType().Name ?? "null", supported);
-      return supported;
-    }
-
-    private static int ? GetTmdbId(BaseItem item) {
-      if (item?.ProviderIds is null) {
-        return null;
-      }
-
-      var id = GetProviderId(item, "Tmdb");
-      if (!string.IsNullOrWhiteSpace(id)) {
-        return int.TryParse(id, out
-          var n) ? (int ? ) n : null;
-      }
-
-      return null;
-    }
-
-    private static string GetImdbId(BaseItem item) {
-      if (item?.ProviderIds is null) {
-        return null;
-      }
-
-      var id = GetProviderId(item, "Imdb");
-      return string.IsNullOrWhiteSpace(id) ? null : id;
-    }
-
-    private static string GetProviderId(BaseItem item, string provider) {
-      if (item?.ProviderIds is null || string.IsNullOrWhiteSpace(provider)) {
-        return null;
-      }
-
-      foreach(var kvp in item.ProviderIds) {
-        if (string.Equals(kvp.Key, provider, StringComparison.OrdinalIgnoreCase)) {
-          return kvp.Value;
-        }
-      }
-
-      return null;
-    }
-
-    private static void AddSegments(
-      IEnumerable < SegmentTimestamp > stamps,
-      bool endRequired,
-      MediaSegmentType type,
-      Guid itemId,
-      long ? runTimeTicks,
-      List < MediaSegmentData > segments) {
-      if (stamps is null) {
-        return;
-      }
-
-      foreach(var stamp in stamps) {
-        if (stamp is null || !stamp.HasValidRange(endRequired)) {
-          continue;
+        /// <summary>
+        /// Initializes a new instance of the <see cref="TheIntroDbSegmentProvider"/> class.
+        /// </summary>
+        /// <param name="libraryManager">Library manager to resolve items.</param>
+        /// <param name="logger">Logger instance.</param>
+        public TheIntroDbSegmentProvider(
+          ILibraryManager libraryManager,
+          ILogger logger)
+        {
+            _libraryManager = libraryManager;
+            _logger = logger;
+            _logger.Info("TheIntroDB segment provider constructed");
         }
 
-        // Null/missing start → 0 (beginning of media)
-        long startMs = stamp.StartMs ?? 0;
+        /// <summary>
+        /// Gets the provider name.
+        /// </summary>
+        public string Name => Plugin.Instance?.Name ?? "TheIntroDB";
 
-        // Null/missing end → use media runtime as fallback
-        long endMs;
-        if (stamp.EndMs.HasValue && stamp.EndMs.Value > 0) {
-          endMs = stamp.EndMs.Value;
-        } else if (runTimeTicks.HasValue && runTimeTicks.Value > 0) {
-          endMs = runTimeTicks.Value / TimeSpan.TicksPerMillisecond;
-        } else {
-          // No end time and no runtime — still add the segment
-          // with EndTicks = 0 so the marker writer can handle it
-          // (it will substitute the media duration there)
-          endMs = 0;
+        /// <summary>
+        /// Fetches segment data for a specific media item.
+        /// </summary>
+        /// <param name="itemId">The item ID to fetch segments for.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>Collection of segment data or empty if not found.</returns>
+        public async Task<IReadOnlyList<MediaSegmentData>> GetMediaSegmentsAsync(
+          Guid itemId,
+          CancellationToken cancellationToken)
+        {
+            _logger.Info("GetMediaSegmentsAsync called for ItemId={0}", itemId);
+
+            if (Plugin.Instance is null)
+            {
+                _logger.Warn("Early exit: Plugin.Instance is null");
+                return Array.Empty<MediaSegmentData>();
+            }
+
+            Plugin.Instance.EnsureConfigurationInitialized();
+
+            var config = Plugin.Instance.Configuration;
+            if (config is null)
+            {
+                _logger.Warn("Early exit: Plugin configuration is not available");
+                return Array.Empty<MediaSegmentData>();
+            }
+
+            var item = _libraryManager.GetItemById(itemId);
+            if (item is null)
+            {
+                _logger.Warn("Early exit: item not found for ItemId={0}", itemId);
+                return Array.Empty<MediaSegmentData>();
+            }
+
+            int? tmdbId = null;
+            string imdbId = null;
+            bool isMovie = false;
+            int? season = null;
+            int? episode = null;
+
+            if (item is Movie movie)
+            {
+                isMovie = true;
+                tmdbId = GetTmdbId(movie);
+                imdbId = GetImdbId(movie);
+                _logger.Info("Movie: Name={0}, TmdbId={1}, ImdbId={2}", item.Name, tmdbId, imdbId ?? "(none)");
+            }
+            else if (item is Episode ep)
+            {
+                tmdbId = GetTmdbId(ep) ?? GetTmdbId(ep.Series);
+                imdbId = GetImdbId(ep) ?? GetImdbId(ep.Series);
+                season = ep.ParentIndexNumber;
+                episode = ep.IndexNumber;
+                _logger.Info("Episode: Name={0}, Series={1}, S{2}E{3}, TmdbId={4}, ImdbId={5}",
+                  item.Name, ep.SeriesName, season, episode, tmdbId, imdbId ?? "(none)");
+            }
+
+            if ((!tmdbId.HasValue || tmdbId.Value <= 0) && string.IsNullOrWhiteSpace(imdbId))
+            {
+                var providers = item.ProviderIds == null ?
+                  "(null)" :
+                  string.Join(",", item.ProviderIds.Select(kvp => kvp.Key + "=" + kvp.Value));
+                _logger.Warn("Early exit: no TmdbId or ImdbId for {0}. ProviderIds: {1}", item.Name, providers);
+                return Array.Empty<MediaSegmentData>();
+            }
+
+            if (!isMovie && (!season.HasValue || !episode.HasValue))
+            {
+                _logger.Warn("Early exit: TV episode missing season/episode for {0}", item.Name);
+                return Array.Empty<MediaSegmentData>();
+            }
+
+            _logger.Debug("Segment toggles: EnableIntro={0}, EnableRecap={1}, EnableCredits={2}, EnablePreview={3}, IgnoreMediaWithExistingSegments={4}",
+              config.EnableIntro, config.EnableRecap, config.EnableCredits, config.EnablePreview, config.IgnoreMediaWithExistingSegments);
+
+            _logger.Info("Fetching from TheIntroDB API: tmdbId={0}, imdbId={1}, isMovie={2}, season={3}, episode={4}",
+              tmdbId, imdbId, isMovie, season, episode);
+
+            var client = new TheIntroDbClient(_httpClient, Plugin.Instance, _logger);
+            long? durationMs = item.RunTimeTicks.HasValue && item.RunTimeTicks.Value > 0 ?
+              item.RunTimeTicks.Value / TimeSpan.TicksPerMillisecond :
+              (long?)null;
+            var media = await client.GetMediaAsync(tmdbId, imdbId, isMovie, season, episode, durationMs, cancellationToken).ConfigureAwait(false);
+
+            if (media is null)
+            {
+                _logger.Info("TheIntroDB API returned no data for {0}", item.Name);
+                return Array.Empty<MediaSegmentData>();
+            }
+
+            long? runTimeTicks = item.RunTimeTicks;
+            var segments = new List<MediaSegmentData>();
+
+            if (config.EnableIntro)
+            {
+                AddSegments(media.Intro, true, MediaSegmentType.Intro, itemId, runTimeTicks, segments);
+            }
+
+            if (config.EnableRecap)
+            {
+                AddSegments(media.Recap, true, MediaSegmentType.Recap, itemId, runTimeTicks, segments);
+            }
+
+            if (config.EnableCredits)
+            {
+                AddSegments(media.Credits, false, MediaSegmentType.Credits, itemId, runTimeTicks, segments);
+            }
+
+            if (config.EnablePreview)
+            {
+                AddSegments(media.Preview, false, MediaSegmentType.Preview, itemId, runTimeTicks, segments);
+            }
+
+            var introCount = segments.Count(s => s.Type == MediaSegmentType.Intro);
+            var recapCount = segments.Count(s => s.Type == MediaSegmentType.Recap);
+            var creditsCount = segments.Count(s => s.Type == MediaSegmentType.Credits);
+            var previewCount = segments.Count(s => s.Type == MediaSegmentType.Preview);
+            Plugin.TrackAnonymousUsageEvent(
+              "segments_generated",
+              new Dictionary<string, object>
+              {
+                  ["host"] = "emby",
+                  ["media_type"] = isMovie ? "movie" : "episode",
+                  ["has_tmdb"] = tmdbId.HasValue && tmdbId.Value > 0 ? 1 : 0,
+                  ["has_imdb"] = !string.IsNullOrWhiteSpace(imdbId) ? 1 : 0,
+                  ["segments_total"] = segments.Count,
+                  ["segments_intro"] = introCount,
+                  ["segments_recap"] = recapCount,
+                  ["segments_credits"] = creditsCount,
+                  ["segments_preview"] = previewCount,
+                  ["enable_intro"] = config.EnableIntro ? 1 : 0,
+                  ["enable_recap"] = config.EnableRecap ? 1 : 0,
+                  ["enable_credits"] = config.EnableCredits ? 1 : 0,
+                  ["enable_preview"] = config.EnablePreview ? 1 : 0,
+                  ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
+              });
+
+            _logger.Info("Returning {0} segments for {1}", segments.Count, item.Name);
+            return segments;
         }
 
-        // Allow start == 0 and end == 0 (unknown boundaries);
-        // only skip if we have a concrete end that is before start
-        if (endMs > 0 && endMs <= startMs) {
-          continue;
+        /// <summary>
+        /// Checks if the provider supports the given item type.
+        /// </summary>
+        /// <param name="item">The media item to check.</param>
+        /// <returns>True if the item is supported (Movie or Episode).</returns>
+        public bool Supports(BaseItem item)
+        {
+            var supported = item is Episode || item is Movie;
+            _logger.Debug("Supports({0}, {1}): {2}", item?.Name ?? "null", item?.GetType().Name ?? "null", supported);
+            return supported;
         }
 
-        long startTicks = startMs * TimeSpan.TicksPerMillisecond;
-        long endTicks = endMs * TimeSpan.TicksPerMillisecond;
+        private static int? GetTmdbId(BaseItem item)
+        {
+            if (item?.ProviderIds is null)
+            {
+                return null;
+            }
 
-        segments.Add(new MediaSegmentData {
-          ItemId = itemId,
-            Type = type,
-            StartTicks = startTicks,
-            EndTicks = endTicks
-        });
-      }
+            var id = GetProviderId(item, "Tmdb");
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                return int.TryParse(id, out
+                  var n) ? (int?)n : null;
+            }
+
+            return null;
+        }
+
+        private static string GetImdbId(BaseItem item)
+        {
+            if (item?.ProviderIds is null)
+            {
+                return null;
+            }
+
+            var id = GetProviderId(item, "Imdb");
+            return string.IsNullOrWhiteSpace(id) ? null : id;
+        }
+
+        private static string GetProviderId(BaseItem item, string provider)
+        {
+            if (item?.ProviderIds is null || string.IsNullOrWhiteSpace(provider))
+            {
+                return null;
+            }
+
+            foreach (var kvp in item.ProviderIds)
+            {
+                if (string.Equals(kvp.Key, provider, StringComparison.OrdinalIgnoreCase))
+                {
+                    return kvp.Value;
+                }
+            }
+
+            return null;
+        }
+
+        private static void AddSegments(
+          IEnumerable<SegmentTimestamp> stamps,
+          bool endRequired,
+          MediaSegmentType type,
+          Guid itemId,
+          long? runTimeTicks,
+          List<MediaSegmentData> segments)
+        {
+            if (stamps is null)
+            {
+                return;
+            }
+
+            foreach (var stamp in stamps)
+            {
+                if (stamp is null || !stamp.HasValidRange(endRequired))
+                {
+                    continue;
+                }
+
+                // Null/missing start → 0 (beginning of media)
+                long startMs = stamp.StartMs ?? 0;
+
+                // Null/missing end → use media runtime as fallback
+                long endMs;
+                if (stamp.EndMs.HasValue && stamp.EndMs.Value > 0)
+                {
+                    endMs = stamp.EndMs.Value;
+                }
+                else if (runTimeTicks.HasValue && runTimeTicks.Value > 0)
+                {
+                    endMs = runTimeTicks.Value / TimeSpan.TicksPerMillisecond;
+                }
+                else
+                {
+                    // No end time and no runtime — still add the segment
+                    // with EndTicks = 0 so the marker writer can handle it
+                    // (it will substitute the media duration there)
+                    endMs = 0;
+                }
+
+                // Allow start == 0 and end == 0 (unknown boundaries);
+                // only skip if we have a concrete end that is before start
+                if (endMs > 0 && endMs <= startMs)
+                {
+                    continue;
+                }
+
+                long startTicks = startMs * TimeSpan.TicksPerMillisecond;
+                long endTicks = endMs * TimeSpan.TicksPerMillisecond;
+
+                segments.Add(new MediaSegmentData
+                {
+                    ItemId = itemId,
+                    Type = type,
+                    StartTicks = startTicks,
+                    EndTicks = endTicks
+                });
+            }
+        }
     }
-  }
 }
