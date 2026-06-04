@@ -99,8 +99,8 @@
         </form>
         </div>
 
-    <div id="ShowPickerOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); z-index: 100000; padding: 1.5em; box-sizing: border-box; align-items: center; justify-content: center; overflow-y: auto;">
-        <div style="width: min(980px, calc(100vw - 3rem)); margin: auto; background: #101010; border-radius: 0.5em; padding: 1.5em; max-height: calc(100vh - 3rem); display: flex; flex-direction: column; box-sizing: border-box; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);">
+    <div id="ShowPickerOverlay" style="display: none; position: fixed; inset: 0; background: rgba(255, 255, 255, 0.7); z-index: 100000; padding: 1.5em; box-sizing: border-box; align-items: center; justify-content: center; overflow-y: auto;">
+        <div style="width: min(980px, calc(100vw - 3rem)); margin: auto; background: #fff; border-radius: 0.5em; padding: 1.5em; max-height: calc(100vh - 3rem); display: flex; flex-direction: column; box-sizing: border-box; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);">
             <div class="sectionTitleContainer flex align-items-center" style="justify-content: space-between;">
                 <div class="flex align-items-center">
                     <button id="BackToLibraryList" is="emby-button" type="button" class="raised emby-button" style="display: none; margin-right: 0.75em;">Back</button>
@@ -124,8 +124,8 @@
         </div>
     </div>
 
-    <div id="ApiStatsOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); z-index: 100001; padding: 1.5em; box-sizing: border-box; align-items: center; justify-content: center; overflow-y: auto;">
-        <div style="width: min(680px, calc(100vw - 3rem)); margin: auto; background: #101010; border-radius: 0.5em; padding: 1.5em; max-height: calc(100vh - 3rem); display: flex; flex-direction: column; box-sizing: border-box; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);">
+    <div id="ApiStatsOverlay" style="display: none; position: fixed; inset: 0; background: rgba(255, 255, 255, 0.7); z-index: 100001; padding: 1.5em; box-sizing: border-box; align-items: center; justify-content: center; overflow-y: auto;">
+        <div style="width: min(680px, calc(100vw - 3rem)); margin: auto; background: #fff; border-radius: 0.5em; padding: 1.5em; max-height: calc(100vh - 3rem); display: flex; flex-direction: column; box-sizing: border-box; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);">
             <div class="sectionTitleContainer flex align-items-center" style="justify-content: space-between;">
                 <h2 class="sectionTitle" style="margin: 0;">API Key Stats</h2>
                 <button id="CloseApiStats" is="emby-button" type="button" class="raised emby-button">Close</button>
@@ -133,6 +133,4 @@
             <div id="ApiStatsContent" style="margin-top: 1em; overflow-y: auto;"></div>
         </div>
     </div>
-
-
 </div>

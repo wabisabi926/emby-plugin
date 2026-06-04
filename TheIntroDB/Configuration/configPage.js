@@ -340,8 +340,8 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                         infoButton.style.borderRadius = '999px';
                         infoButton.style.fontWeight = '700';
                         infoButton.style.minWidth = '0';
-                        infoButton.style.background = 'rgba(255, 255, 255, 0.08)';
-                        infoButton.style.border = '1px solid rgba(255, 255, 255, 0.16)';
+                        infoButton.style.background = 'rgba(117, 117, 117, 0.08)';
+                        infoButton.style.border = '1px solid rgba(117, 117, 117, 0.16)';
                         infoButton.style.color = 'inherit';
                         infoButton.addEventListener('click', function () {
                             openApiStatsOverlay();
@@ -379,9 +379,9 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                         var statValue = stats[key] != null ? stats[key] : stats[pascalKey];
                         var card = document.createElement('div');
                         card.style.padding = '0.85em';
-                        card.style.border = '1px solid rgba(255, 255, 255, 0.12)';
+                        card.style.border = '1px solid rgba(117, 117, 117, 0.12)';
                         card.style.borderRadius = '0.5em';
-                        card.style.background = 'rgba(255, 255, 255, 0.03)';
+                        card.style.background = 'rgba(117, 117, 117, 0.03)';
 
                         var label = document.createElement('div');
                         label.textContent = getStatLabelText(key);
@@ -539,6 +539,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                         return '';
                     }
 
+                    // TODO: Make an emby version of this image
                     return 'https://raw.githubusercontent.com/TheIntroDB/jellyfin-plugin/main/assets/folder.png';
                 }
 
@@ -558,11 +559,11 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                     element.style.padding = '0.75em';
                     element.style.textAlign = 'center';
                     element.style.border = isSelected
-                        ? '2px solid rgba(255, 255, 255, 0.85)'
+                        ? '2px solid rgba(117, 117, 117, 0.85)'
                         : '1px solid rgba(255, 255, 255, 0.12)';
                     element.style.borderRadius = '0.5em';
                     element.style.background = isSelected
-                        ? 'rgba(255, 255, 255, 0.12)'
+                        ? 'rgba(117, 117, 117, 0.12)'
                         : 'rgba(255, 255, 255, 0.03)';
                     element.style.cursor = isInteractive ? 'pointer' : 'default';
 
@@ -576,7 +577,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                     image.style.aspectRatio = '2 / 3';
                     image.style.objectFit = 'cover';
                     image.style.borderRadius = '0.35em';
-                    image.style.background = 'rgba(255, 255, 255, 0.08)';
+                    image.style.background = 'rgba(117, 117, 117, 0.08)';
                     image.addEventListener('error', function () {
                         if (fallbackImageUrl && image.src !== fallbackImageUrl) {
                             image.src = fallbackImageUrl;
