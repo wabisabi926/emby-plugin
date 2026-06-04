@@ -12,13 +12,22 @@
             <p class="fieldDescription">
                 Segment data (intro, recap, credits, preview) is fetched from
                 <a href="https://theintrodb.org" target="_blank" rel="noopener noreferrer">TheIntroDB API</a>
-                using each item's TMDB or IMDB ID.
+                using each item's TMDB or IMDB ID. Segments are not loaded when you press play; run the TheIntroDB media segment scan scheduled task to populate them.
             </p>
 
             <div class="inputContainer">
                 <label class="inputLabel inputLabelUnfocused" for="ApiKey">API key (optional)</label>
                 <input id="ApiKey" name="ApiKey" type="password" is="emby-input" autocomplete="off" />
                 <div class="fieldDescription">Optional Bearer token; when set, your pending and accepted submissions are weighted higher in results.</div>
+                <div id="ApiKeyValidationStatus" class="fieldDescription" style="display: none; margin-top: 0.75em; align-items: center; gap: 0.5em;"></div>
+            </div>
+
+            <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused">Only scan selected shows or libraries (optional)</label>
+                <div id="SelectedShowSummary" class="fieldDescription" style="margin-bottom: 1em;">All media</div>
+                <button id="OpenShowPicker" is="emby-button" type="button" class="raised emby-button">Browse libraries and shows</button>
+                <button id="ClearSelectedShow" is="emby-button" type="button" class="raised emby-button" style="margin-left: 0.5em;">Clear selection</button>
+                <div class="fieldDescription">Whitelisting a library scans all movies and episodes inside it. Selecting individual shows only scans those Emby series. Any media outside the selected libraries or shows is left unchanged.</div>
             </div>
 
             <div class="checkboxContainer checkboxContainer-withDescription">
@@ -88,5 +97,42 @@
                 </button>
             </div>
         </form>
+        </div>
+
+    <div id="ShowPickerOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); z-index: 100000; padding: 1.5em; box-sizing: border-box; align-items: center; justify-content: center; overflow-y: auto;">
+        <div style="width: min(980px, calc(100vw - 3rem)); margin: auto; background: #101010; border-radius: 0.5em; padding: 1.5em; max-height: calc(100vh - 3rem); display: flex; flex-direction: column; box-sizing: border-box; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);">
+            <div class="sectionTitleContainer flex align-items-center" style="justify-content: space-between;">
+                <div class="flex align-items-center">
+                    <button id="BackToLibraryList" is="emby-button" type="button" class="raised emby-button" style="display: none; margin-right: 0.75em;">Back</button>
+                    <h2 id="ShowPickerTitle" class="sectionTitle" style="margin: 0;">Choose Libraries</h2>
+                </div>
+                <div>
+                    <button id="CloseShowPicker" is="emby-button" type="button" class="raised emby-button">Cancel</button>
+                    <button id="DoneShowPicker" is="emby-button" type="button" class="raised emby-button" style="margin-left: 0.5em;">Done</button>
+                </div>
+            </div>
+            <div class="inputContainer" style="margin-top: 1em; margin-bottom: 0.25em;">
+                <button id="ToggleLibraryWhitelist" is="emby-button" type="button" class="raised emby-button" style="display: none;">Whitelist whole folder</button>
+                <div id="ShowPickerHint" class="fieldDescription" style="margin-top: 0.75em;">Open a library to browse its movies and shows. Inside a library, you can whitelist the whole folder or pick individual shows.</div>
+            </div>
+            <div class="inputContainer">
+                <label id="ShowPickerSearchLabel" class="inputLabel inputLabelUnfocused" for="ShowPickerSearch">Search libraries</label>
+                <input id="ShowPickerSearch" type="text" is="emby-input" autocomplete="off" />
+            </div>
+            <div id="ShowPickerStatus" class="fieldDescription" style="margin-bottom: 1em;">Loading libraries...</div>
+            <div id="ShowPickerList" style="overflow-y: auto; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 0.5em; min-height: 12em; padding: 0.75em;"></div>
+        </div>
     </div>
+
+    <div id="ApiStatsOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); z-index: 100001; padding: 1.5em; box-sizing: border-box; align-items: center; justify-content: center; overflow-y: auto;">
+        <div style="width: min(680px, calc(100vw - 3rem)); margin: auto; background: #101010; border-radius: 0.5em; padding: 1.5em; max-height: calc(100vh - 3rem); display: flex; flex-direction: column; box-sizing: border-box; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);">
+            <div class="sectionTitleContainer flex align-items-center" style="justify-content: space-between;">
+                <h2 class="sectionTitle" style="margin: 0;">API Key Stats</h2>
+                <button id="CloseApiStats" is="emby-button" type="button" class="raised emby-button">Close</button>
+            </div>
+            <div id="ApiStatsContent" style="margin-top: 1em; overflow-y: auto;"></div>
+        </div>
+    </div>
+
+
 </div>
