@@ -23,7 +23,7 @@ namespace TheIntroDB.Api
         public SegmentsService(IApplicationPaths applicationPaths, ILogManager logManager)
         {
             _applicationPaths = applicationPaths;
-            _logger = logManager.GetLogger("TheIntroDB");
+            _logger = Plugin.Instance?.FileLogger ?? logManager.GetLogger("TheIntroDB");
         }
 
         public object Get(GetSegments request)
