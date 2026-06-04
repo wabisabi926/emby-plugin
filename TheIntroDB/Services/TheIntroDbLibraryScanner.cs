@@ -75,25 +75,7 @@ namespace TheIntroDB.Services
                 return 0;
             }
 
-            var query = new InternalItemsQuery
-            {
-                IncludeItemTypes = new[] {
-            "Movie",
-            "Episode"
-          },
-                Recursive = true
-            };
-
-            var items = _libraryManager.GetItemList(query) ?? Array.Empty<BaseItem>();
-            if (items.Length == 0)
-            {
-                _logger.Warn("TheIntroDB scan: no items returned for IncludeItemTypes query. Falling back to broad query and filtering.");
-                var fallback = _libraryManager.GetItemList(new InternalItemsQuery
-                {
-                    Recursive = true
-                }) ?? Array.Empty<BaseItem>();
-                items = fallback.Where(i => i is Episode || i is Movie).ToArray();
-            }
+            var items = GetFilteredItems(config);
 
             // Pre-filter: when IgnoreMediaWithExistingSegments is enabled,
             // fetch all item IDs that already have segments in ONE batch query
@@ -180,6 +162,145 @@ namespace TheIntroDB.Services
                 totalSegments, cachedSegmentCount, totalSegments - cachedSegmentCount,
                 cachedSegmentCount + processed);
             return totalSegments;
+        }
+
+        private static List<string> ParseCommaSeparatedIds(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return new List<string>();
+            }
+
+            return raw.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(id => id.Trim())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .ToList();
+        }
+
+        private BaseItem[] GetFilteredItems(PluginConfiguration config)
+        {
+            var selectedLibraryIds = ParseCommaSeparatedIds(config.SelectedLibraryIds);
+            var selectedShowIds = ParseCommaSeparatedIds(config.SelectedShowIds);
+            bool hasLibraryFilter = selectedLibraryIds.Count > 0;
+            bool hasShowFilter = selectedShowIds.Count > 0;
+
+            // Get all candidate items
+            var query = new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { "Movie", "Episode" },
+                Recursive = true
+            };
+
+            var allItems = _libraryManager.GetItemList(query) ?? Array.Empty<BaseItem>();
+            if (allItems.Length == 0)
+            {
+                _logger.Warn("TheIntroDB scan: no items returned for IncludeItemTypes query. Falling back to broad query and filtering.");
+                var fallback = _libraryManager.GetItemList(new InternalItemsQuery
+                {
+                    Recursive = true
+                }) ?? Array.Empty<BaseItem>();
+                allItems = fallback.Where(i => i is Episode || i is Movie).ToArray();
+            }
+
+            // No filters: return all items
+            if (!hasLibraryFilter && !hasShowFilter)
+            {
+                return allItems;
+            }
+
+            // Parse library GUIDs
+            var libraryGuidSet = new HashSet<Guid>();
+            foreach (var id in selectedLibraryIds)
+            {
+                if (Guid.TryParse(id, out var g))
+                {
+                    libraryGuidSet.Add(g);
+                }
+                else
+                {
+                    _logger.Warn("TheIntroDB scan: invalid library GUID '{0}' in SelectedLibraryIds, skipping", id);
+                }
+            }
+
+            // Parse show IDs into series and movie sets
+            var seriesGuidSet = new HashSet<Guid>();
+            var movieGuidSet = new HashSet<Guid>();
+            foreach (var id in selectedShowIds)
+            {
+                if (!Guid.TryParse(id, out var g))
+                {
+                    _logger.Warn("TheIntroDB scan: invalid GUID '{0}' in SelectedShowIds, skipping", id);
+                    continue;
+                }
+
+                var item = _libraryManager.GetItemById(g);
+                if (item is Series)
+                {
+                    seriesGuidSet.Add(g);
+                }
+                else if (item is Movie)
+                {
+                    movieGuidSet.Add(g);
+                }
+                else if (item != null)
+                {
+                    _logger.Warn("TheIntroDB scan: unexpected item type '{0}' in SelectedShowIds for '{1}', skipping", item.GetType().Name, item.Name);
+                }
+                else
+                {
+                    _logger.Warn("TheIntroDB scan: item not found for GUID '{0}' in SelectedShowIds, skipping", id);
+                }
+            }
+
+            // Determine which items pass the filter by climbing parent chain.
+            // For each item, walk up its parents and check if any ancestor
+            // matches a selected library, series, or if the item itself is a
+            // selected movie.
+            BaseItem[] filteredItems;
+
+            if (hasLibraryFilter || hasShowFilter)
+            {
+                filteredItems = allItems.Where(item =>
+                {
+                    if (item == null) return false;
+
+                    // Walk the parent chain to check membership
+                    BaseItem current = item;
+                    while (current != null)
+                    {
+                        if (hasLibraryFilter && libraryGuidSet.Contains(current.Id))
+                        {
+                            return true;
+                        }
+
+                        if (hasShowFilter)
+                        {
+                            // A series in the parent chain means this item is an episode of that series
+                            if (current is Series && seriesGuidSet.Contains(current.Id))
+                            {
+                                return true;
+                            }
+                        }
+
+                        current = current.GetParent();
+                    }
+
+                    // Also check if this item itself is a selected movie
+                    if (hasShowFilter && item is Movie && movieGuidSet.Contains(item.Id))
+                    {
+                        return true;
+                    }
+
+                    return false;
+                }).ToArray();
+            }
+            else
+            {
+                filteredItems = allItems;
+            }
+
+            _logger.Info("TheIntroDB scan: {0} items after library/show filtering (from {1} total)", filteredItems.Length, allItems.Length);
+            return filteredItems;
         }
 
         private static HashSet<MediaSegmentType> GetRequestedTypes(PluginConfiguration config)

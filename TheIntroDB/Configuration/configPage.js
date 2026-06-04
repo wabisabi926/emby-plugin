@@ -86,7 +86,11 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
                 function rememberShowItems(items) {
                     (items || []).forEach(function (item) {
-                        if (!item || !item.Id || item.Type !== 'Series') {
+                        if (!item || !item.Id) {
+                            return;
+                        }
+
+                        if (item.Type !== 'Series' && item.Type !== 'Movie') {
                             return;
                         }
 
@@ -120,7 +124,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                         if (!item) {
                             item = {
                                 Id: id,
-                                Name: 'Previously selected show',
+                                Name: 'Previously selected item',
                                 Type: 'Series',
                                 ProductionYear: null
                             };
@@ -172,9 +176,9 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
                     if (selectedShowIds.length) {
                         if (selectedShowNames.length <= 2) {
-                            summaryParts.push('Shows: ' + selectedShowNames.join(', '));
+                            summaryParts.push(selectedShowNames.join(', '));
                         } else {
-                            summaryParts.push(selectedShowIds.length + ' shows selected: ' + selectedShowNames.slice(0, 2).join(', ') + ', ...');
+                            summaryParts.push(selectedShowIds.length + ' items selected: ' + selectedShowNames.slice(0, 2).join(', ') + ', ...');
                         }
                     }
 
@@ -503,10 +507,16 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                     }, 650);
                 }
 
+                function isValidGuid(value) {
+                    if (!value) return false;
+                    var normalized = normalizeId(value);
+                    return normalized.length === 32 && /^[0-9a-f]{32}$/i.test(normalized);
+                }
+
                 function getSelectedShowIdsFromConfig(config) {
                     var configuredShowIds = getConfiguredIdList(config.SelectedShowIds);
 
-                    if (config.SelectedShowId) {
+                    if (config.SelectedShowId && isValidGuid(config.SelectedShowId)) {
                         configuredShowIds.push(config.SelectedShowId);
                     }
 
@@ -622,8 +632,8 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                         : 'Whitelist whole folder';
                     showPickerSearchLabelElement.textContent = isBrowsingLibrary ? 'Search this library' : 'Search libraries';
                     showPickerHintElement.textContent = isBrowsingLibrary
-                        ? 'Movies are included only when the whole folder is whitelisted. Series can still be selected individually.'
-                        : 'Open a library to browse its movies and shows. Inside a library, you can whitelist the whole folder or pick individual shows.';
+                        ? 'Movies and series can be selected individually, or you can whitelist the whole folder to include everything inside it.'
+                        : 'Open a library to browse its movies and shows. Inside a library, you can whitelist the whole folder or pick individual movies and shows.';
                 }
 
                 function getPickerStatusText() {
@@ -688,17 +698,28 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
                     var libraryWhitelisted = isIdSelected(currentBrowseLibraryId, pickerSelectedLibraryIds);
                     matchingItems.forEach(function (item) {
-                        if (item.Type === 'Series') {
-                            var showSelected = isIdSelected(item.Id, pickerSelectedShowIds);
-                            var showCard = createCardElement(
-                                item,
-                                getDisplayLabel(item),
-                                libraryWhitelisted ? 'Included via whitelisted folder' : (showSelected ? 'Selected show' : 'Click to select show'),
-                                libraryWhitelisted || showSelected,
-                                true);
+                        var itemSelected = isIdSelected(item.Id, pickerSelectedShowIds);
+                        var isInteractive = !libraryWhitelisted;
+                        var stateText;
 
-                            showCard.addEventListener('click', function () {
-                                if (showSelected) {
+                        if (libraryWhitelisted) {
+                            stateText = 'Included via whitelisted folder';
+                        } else if (itemSelected) {
+                            stateText = item.Type === 'Series' ? 'Selected show' : 'Selected movie';
+                        } else {
+                            stateText = 'Click to select';
+                        }
+
+                        var card = createCardElement(
+                            item,
+                            getDisplayLabel(item),
+                            stateText,
+                            libraryWhitelisted || itemSelected,
+                            isInteractive);
+
+                        if (isInteractive) {
+                            card.addEventListener('click', function () {
+                                if (itemSelected) {
                                     pickerSelectedShowIds = pickerSelectedShowIds.filter(function (selectedId) {
                                         return normalizeId(selectedId) !== normalizeId(item.Id);
                                     });
@@ -708,18 +729,9 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
                                 renderPickerList(showPickerSearchElement.value || '');
                             });
-
-                            showPickerListElement.appendChild(showCard);
-                            return;
                         }
 
-                        var movieCard = createCardElement(
-                            item,
-                            getDisplayLabel(item),
-                            libraryWhitelisted ? 'Included via whitelisted folder' : 'Movie',
-                            libraryWhitelisted,
-                            false);
-                        showPickerListElement.appendChild(movieCard);
+                        showPickerListElement.appendChild(card);
                     });
                 }
 
@@ -834,7 +846,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
                     return getJson(ApiClient.getUrl('Users/' + currentUserId + '/Items', {
                         Recursive: true,
-                        IncludeItemTypes: 'Series',
+                        IncludeItemTypes: 'Series,Movie',
                         SortBy: 'SortName',
                         SortOrder: 'Ascending',
                         Fields: 'ProductionYear',
@@ -846,7 +858,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                             return !!item;
                         }));
                     }).catch(function () {
-                        // Keep fallback labels when show references cannot be loaded.
+                        // Keep fallback labels when item references cannot be loaded.
                     });
                 }
 

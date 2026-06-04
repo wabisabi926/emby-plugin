@@ -14,6 +14,8 @@ namespace TheIntroDB.Configuration
         {
             SchemaVersion = 1;
             ApiKey = string.Empty;
+            SelectedLibraryIds = string.Empty;
+            SelectedShowIds = string.Empty;
             EnableIntro = true;
             EnableRecap = true;
             EnableCredits = true;
@@ -29,6 +31,17 @@ namespace TheIntroDB.Configuration
         /// When set, your pending and accepted submissions are weighted higher.
         /// </summary>
         public string ApiKey { get; set; }
+
+        /// <summary>
+        /// Gets or sets the comma-separated list of library folder GUIDs to restrict scanning to.
+        /// </summary>
+        public string SelectedLibraryIds { get; set; }
+
+        /// <summary>
+        /// Gets or sets the comma-separated list of Series or Movie GUIDs to restrict scanning to.
+        /// When a Series is included, all its episodes are scanned. Individual movies can also be selected.
+        /// </summary>
+        public string SelectedShowIds { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether to provide intro segments from TheIntroDB.
