@@ -12,10 +12,6 @@ using TheIntroDB.Configuration;
 
 namespace TheIntroDB.Api
 {
-    /// <summary>
-    /// HTTP client for TheIntroDB API (GET /media). Fetches media segment data for movies and TV episodes.
-    /// Rate limit: ~30 requests per 10 seconds (per IP). We throttle to stay under this.
-    /// </summary>
     public class TheIntroDbClient
     {
         private const int MaxRequestsPerWindow = 30;
@@ -29,12 +25,6 @@ namespace TheIntroDB.Api
         private readonly Plugin _plugin;
         private readonly ILogger _logger;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TheIntroDbClient"/> class.
-        /// </summary>
-        /// <param name="httpClient">HTTP client for requests.</param>
-        /// <param name="plugin">Plugin instance for configuration.</param>
-        /// <param name="logger">Logger instance.</param>
         public TheIntroDbClient(HttpClient httpClient, Plugin plugin, ILogger logger)
         {
             _httpClient = httpClient;
@@ -42,17 +32,6 @@ namespace TheIntroDB.Api
             _logger = logger;
         }
 
-        /// <summary>
-        /// Fetches media segment data for the given TMDB id (movie) or episode.
-        /// </summary>
-        /// <param name="tmdbId">TMDB ID of the movie or series.</param>
-        /// <param name="tvdbId">TVDB ID of the movie or series (optional fallback).</param>
-        /// <param name="imdbId">IMDB ID of the movie or series (optional fallback).</param>
-        /// <param name="isMovie">True for movie, false for TV episode.</param>
-        /// <param name="season">Season number (required for TV).</param>
-        /// <param name="episode">Episode number (required for TV).</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>MediaResponse object or null if not found or error.</returns>
         public async Task<MediaResponse> GetMediaAsync(
             int? tmdbId,
             int? tvdbId,
@@ -299,9 +278,6 @@ namespace TheIntroDB.Api
             return 300;
         }
 
-        /// <summary>
-        /// Waits if necessary to respect the API rate limit (30 requests per 10 seconds).
-        /// </summary>
         private static async Task WaitForRateLimitAsync(CancellationToken cancellationToken)
         {
             await RateLimitLock.WaitAsync(cancellationToken).ConfigureAwait(false);
