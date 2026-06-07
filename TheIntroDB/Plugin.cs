@@ -46,7 +46,8 @@ namespace TheIntroDB
             : base(applicationPaths, xmlSerializer)
         {
             Instance = this;
-            FileLogger = new PluginLogger(applicationPaths.DataPath);
+            var embyLogger = logManager.GetLogger("TheIntroDB");
+            FileLogger = new PluginLogger(applicationPaths.DataPath, embyLogger);
             _logger = FileLogger;
         }
 

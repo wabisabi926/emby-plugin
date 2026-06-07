@@ -22,6 +22,7 @@ namespace TheIntroDB.Configuration
             EnablePreview = true;
             IgnoreMediaWithExistingSegments = true;
             EnableAnonymousUsageReporting = true;
+            EnableFileLogging = false;
         }
 
         public int SchemaVersion { get; set; }
@@ -73,5 +74,11 @@ namespace TheIntroDB.Configuration
         /// Gets or sets a value indicating whether anonymous usage reporting is enabled.
         /// </summary>
         public bool EnableAnonymousUsageReporting { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether plugin logs are written to a separate file
+        /// instead of the main Emby log.
+        /// </summary>
+        public bool EnableFileLogging { get; set; }
     }
 }

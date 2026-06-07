@@ -8,106 +8,174 @@ namespace TheIntroDB.Services
     public class PluginLogger : ILogger, IDisposable
     {
         private readonly string _logFilePath;
+        private readonly ILogger _embyLogger;
         private readonly object _lock = new object();
 
-        public PluginLogger(string dataPath)
+        public PluginLogger(string dataPath, ILogger embyLogger)
         {
+            _embyLogger = embyLogger;
             var logDir = Path.Combine(dataPath, "theintrodb");
             Directory.CreateDirectory(logDir);
             _logFilePath = Path.Combine(logDir, "theintrodb.log");
-            WriteLine("INF", "PluginLogger initialized");
         }
 
         public void Info(string message, params object[] paramList)
         {
-            WriteLine("INF", message, paramList);
+            if (UseFileLogging)
+                WriteLine("INF", message, paramList);
+            else
+                _embyLogger.Info(message, paramList);
         }
 
         public void Warn(string message, params object[] paramList)
         {
-            WriteLine("WRN", message, paramList);
+            if (UseFileLogging)
+                WriteLine("WRN", message, paramList);
+            else
+                _embyLogger.Warn(message, paramList);
         }
 
         public void Error(string message, params object[] paramList)
         {
-            WriteLine("ERR", message, paramList);
+            if (UseFileLogging)
+                WriteLine("ERR", message, paramList);
+            else
+                _embyLogger.Error(message, paramList);
         }
 
         public void Debug(string message, params object[] paramList)
         {
-            WriteLine("DBG", message, paramList);
+            if (UseFileLogging)
+                WriteLine("DBG", message, paramList);
+            else
+                _embyLogger.Debug(message, paramList);
         }
 
         public void Fatal(string message, params object[] paramList)
         {
-            WriteLine("FTL", message, paramList);
+            if (UseFileLogging)
+                WriteLine("FTL", message, paramList);
+            else
+                _embyLogger.Fatal(message, paramList);
         }
 
         public void FatalException(string message, Exception exception, params object[] paramList)
         {
-            WriteLine("FTL", message + ": " + exception, paramList);
+            if (UseFileLogging)
+                WriteLine("FTL", message + ": " + exception, paramList);
+            else
+                _embyLogger.FatalException(message, exception, paramList);
         }
 
         public void ErrorException(string message, Exception exception, params object[] paramList)
         {
-            WriteLine("ERR", message + ": " + exception, paramList);
+            if (UseFileLogging)
+                WriteLine("ERR", message + ": " + exception, paramList);
+            else
+                _embyLogger.ErrorException(message, exception, paramList);
         }
 
         public void LogMultiline(string message, LogSeverity severity, StringBuilder additionalContent)
         {
-            var level = SeverityToPrefix(severity);
-            WriteLine(level, message);
-            if (additionalContent != null && additionalContent.Length > 0)
+            if (UseFileLogging)
             {
-                lock (_lock)
+                var level = SeverityToPrefix(severity);
+                WriteLine(level, message);
+                if (additionalContent != null && additionalContent.Length > 0)
                 {
-                    try
+                    lock (_lock)
                     {
-                        File.AppendAllText(_logFilePath, additionalContent.ToString() + Environment.NewLine);
-                    }
-                    catch
-                    {
+                        try
+                        {
+                            File.AppendAllText(_logFilePath, additionalContent.ToString() + Environment.NewLine);
+                        }
+                        catch
+                        {
+                        }
                     }
                 }
+            }
+            else
+            {
+                _embyLogger.LogMultiline(message, severity, additionalContent);
             }
         }
 
         public void Log(LogSeverity severity, string message, params object[] paramList)
         {
-            WriteLine(SeverityToPrefix(severity), message, paramList);
+            if (UseFileLogging)
+                WriteLine(SeverityToPrefix(severity), message, paramList);
+            else
+                _embyLogger.Log(severity, message, paramList);
         }
 
         public void Dispose()
         {
-            WriteLine("INF", "PluginLogger disposed");
+            if (UseFileLogging)
+                WriteLine("INF", "PluginLogger disposed");
         }
 
 #pragma warning disable CS0618
         public void Log(LogSeverity severity, ReadOnlyMemory<char> message)
         {
-            WriteLine(SeverityToPrefix(severity), message.ToString());
+            var msg = message.ToString();
+            if (UseFileLogging)
+                WriteLine(SeverityToPrefix(severity), msg);
+            else
+                _embyLogger.Log(severity, msg);
         }
 
         public void Error(ReadOnlyMemory<char> message)
         {
-            WriteLine("ERR", message.ToString());
+            var msg = message.ToString();
+            if (UseFileLogging)
+                WriteLine("ERR", msg);
+            else
+                _embyLogger.Error(msg);
         }
 
         public void Warn(ReadOnlyMemory<char> message)
         {
-            WriteLine("WRN", message.ToString());
+            var msg = message.ToString();
+            if (UseFileLogging)
+                WriteLine("WRN", msg);
+            else
+                _embyLogger.Warn(msg);
         }
 
         public void Info(ReadOnlyMemory<char> message)
         {
-            WriteLine("INF", message.ToString());
+            var msg = message.ToString();
+            if (UseFileLogging)
+                WriteLine("INF", msg);
+            else
+                _embyLogger.Info(msg);
         }
 
         public void Debug(ReadOnlyMemory<char> message)
         {
-            WriteLine("DBG", message.ToString());
+            var msg = message.ToString();
+            if (UseFileLogging)
+                WriteLine("DBG", msg);
+            else
+                _embyLogger.Debug(msg);
         }
 #pragma warning restore CS0618
+
+        private bool UseFileLogging
+        {
+            get
+            {
+                try
+                {
+                    return Plugin.Instance?.Configuration?.EnableFileLogging == true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+        }
 
         private static string SeverityToPrefix(LogSeverity severity)
         {

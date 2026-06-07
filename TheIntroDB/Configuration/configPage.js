@@ -971,6 +971,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                                 page.querySelector('#EnablePreview').checked = config.EnablePreview !== false;
                                 page.querySelector('#IgnoreMediaWithExistingSegments').checked = config.IgnoreMediaWithExistingSegments !== false;
                                 page.querySelector('#EnableAnonymousUsageReporting').checked = config.EnableAnonymousUsageReporting !== false;
+                                page.querySelector('#EnableFileLogging').checked = config.EnableFileLogging === true;
                                 if (apiKeyInput.value) {
                                     return validateApiKey(apiKeyInput.value, true);
                                 }
@@ -1099,6 +1100,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                             config.EnablePreview = page.querySelector('#EnablePreview').checked;
                             config.IgnoreMediaWithExistingSegments = page.querySelector('#IgnoreMediaWithExistingSegments').checked;
                             config.EnableAnonymousUsageReporting = page.querySelector('#EnableAnonymousUsageReporting').checked;
+                            config.EnableFileLogging = page.querySelector('#EnableFileLogging').checked;
                             return ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function (result) {
                                 Dashboard.processPluginConfigurationUpdateResult(result);
                             });
