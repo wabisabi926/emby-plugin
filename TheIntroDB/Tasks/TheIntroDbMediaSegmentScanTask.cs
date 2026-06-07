@@ -35,7 +35,7 @@ namespace TheIntroDB.Tasks
             IApplicationPaths applicationPaths,
             ILogManager logManager)
         {
-            _logger = logManager.GetLogger("TheIntroDB");
+            _logger = Plugin.Instance?.FileLogger ?? logManager.GetLogger("TheIntroDB");
             var segmentProvider = new TheIntroDbSegmentProvider(libraryManager, _logger);
             var repository = new TheIntroDbSegmentRepository(_logger, applicationPaths);
             var chapterWriter = new TheIntroDbChapterMarkerWriter(itemRepository, _logger);

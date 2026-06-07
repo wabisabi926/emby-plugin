@@ -46,7 +46,8 @@ namespace TheIntroDB
             : base(applicationPaths, xmlSerializer)
         {
             Instance = this;
-            _logger = logManager.GetLogger("TheIntroDB");
+            FileLogger = new PluginLogger(applicationPaths.DataPath);
+            _logger = FileLogger;
         }
 
         private readonly ILogger _logger;
@@ -61,6 +62,11 @@ namespace TheIntroDB
         /// Gets the current plugin instance.
         /// </summary>
         public static Plugin Instance { get; private set; }
+
+        /// <summary>
+        /// Gets the file-based logger for this plugin.
+        /// </summary>
+        public PluginLogger FileLogger { get; private set; }
 
         internal static DateTime RateLimitExpiryUtc { get; set; }
 
@@ -373,7 +379,7 @@ namespace TheIntroDB
             ILogManager logManager)
         {
             _sessionManager = sessionManager;
-            _logger = logManager.GetLogger("TheIntroDB");
+            _logger = Plugin.Instance?.FileLogger ?? logManager.GetLogger("TheIntroDB");
             _repository = new TheIntroDbSegmentRepository(_logger, applicationPaths);
         }
 
@@ -540,7 +546,7 @@ namespace TheIntroDB
         {
             _libraryManager = libraryManager;
             _itemRepository = itemRepository;
-            _logger = logManager.GetLogger("TheIntroDB");
+            _logger = Plugin.Instance?.FileLogger ?? logManager.GetLogger("TheIntroDB");
             _segmentRepository = new TheIntroDbSegmentRepository(_logger, applicationPaths);
             _chapterWriter = new TheIntroDbChapterMarkerWriter(_itemRepository, _logger);
         }
