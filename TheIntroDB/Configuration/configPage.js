@@ -690,40 +690,31 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                         return;
                     }
 
-                    var libraryWhitelisted = isIdSelected(currentBrowseLibraryId, pickerSelectedLibraryIds);
                     matchingItems.forEach(function (item) {
                         var itemSelected = isIdSelected(item.Id, pickerSelectedShowIds);
-                        var isInteractive = !libraryWhitelisted;
-                        var stateText;
-
-                        if (libraryWhitelisted) {
-                            stateText = 'Included via whitelisted folder';
-                        } else if (itemSelected) {
-                            stateText = item.Type === 'Series' ? 'Selected show' : 'Selected movie';
-                        } else {
-                            stateText = 'Click to select';
-                        }
+                        var libraryWhitelisted = isIdSelected(currentBrowseLibraryId, pickerSelectedLibraryIds);
+                        var stateText = itemSelected
+                            ? (item.Type === 'Series' ? 'Selected show' : 'Selected movie')
+                            : 'Click to select';
 
                         var card = createCardElement(
                             item,
                             getDisplayLabel(item),
                             stateText,
                             libraryWhitelisted || itemSelected,
-                            isInteractive);
+                            true);
 
-                        if (isInteractive) {
-                            card.addEventListener('click', function () {
-                                if (itemSelected) {
-                                    pickerSelectedShowIds = pickerSelectedShowIds.filter(function (selectedId) {
-                                        return normalizeId(selectedId) !== normalizeId(item.Id);
-                                    });
-                                } else {
-                                    pickerSelectedShowIds = dedupeIds(pickerSelectedShowIds.concat([item.Id]));
-                                }
+                        card.addEventListener('click', function () {
+                            if (itemSelected) {
+                                pickerSelectedShowIds = pickerSelectedShowIds.filter(function (selectedId) {
+                                    return normalizeId(selectedId) !== normalizeId(item.Id);
+                                });
+                            } else {
+                                pickerSelectedShowIds = dedupeIds(pickerSelectedShowIds.concat([item.Id]));
+                            }
 
-                                renderPickerList(showPickerSearchElement.value || '');
-                            });
-                        }
+                            renderPickerList(showPickerSearchElement.value || '');
+                        });
 
                         showPickerListElement.appendChild(card);
                     });
