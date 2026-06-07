@@ -216,6 +216,7 @@ namespace TheIntroDB.Api
                                 ["result"] = mediaResponse == null ? "success_null" : "success",
                                 ["media_type"] = isMovie ? "movie" : "episode",
                                 ["has_tmdb"] = hasTmdb ? 1 : 0,
+                                ["has_tvdb"] = hasTvdb ? 1 : 0,
                                 ["has_imdb"] = hasImdb ? 1 : 0,
                                 ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0,
                                 ["intro_count"] = mediaResponse?.Intro?.Count ?? 0,
@@ -238,6 +239,7 @@ namespace TheIntroDB.Api
                             ["result"] = "exception",
                             ["media_type"] = isMovie ? "movie" : "episode",
                             ["has_tmdb"] = hasTmdb ? 1 : 0,
+                            ["has_tvdb"] = hasTvdb ? 1 : 0,
                             ["has_imdb"] = hasImdb ? 1 : 0,
                             ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
                         });
