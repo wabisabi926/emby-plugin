@@ -20,6 +20,8 @@ namespace TheIntroDB.Services
     /// </summary>
     public class TheIntroDbLibraryScanner
     {
+        private const int MaxConsecutiveApiFailures = 20;
+
         private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
         private readonly TheIntroDbSegmentProvider _segmentProvider;
@@ -106,15 +108,16 @@ namespace TheIntroDB.Services
             var totalSegments = cachedSegmentCount;
             var processed = 0;
             var total = itemsToScan.Length;
+            var consecutiveApiFailures = 0;
 
             for (var i = 0; i < itemsToScan.Length; i++)
             {
+                var item = itemsToScan[i];
+
                 if (cancellationToken.IsCancellationRequested)
                 {
                     break;
                 }
-
-                var item = itemsToScan[i];
 
                 try
                 {
@@ -129,6 +132,23 @@ namespace TheIntroDB.Services
 
                     var fetched = await _segmentProvider.GetMediaSegmentsAsync(
                       item.Id, cancellationToken).ConfigureAwait(false);
+
+                    if (fetched == null || fetched.Count == 0)
+                    {
+                        consecutiveApiFailures++;
+                        if (consecutiveApiFailures >= MaxConsecutiveApiFailures)
+                        {
+                            _logger.Error(
+                                "TheIntroDB scan aborting: {0} consecutive items returned no segments (API may be down). Skipping remaining {1} items.",
+                                consecutiveApiFailures, itemsToScan.Length - i);
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        consecutiveApiFailures = 0;
+                    }
+
                     var storedSegments = fetched.Select(s => new StoredMediaSegment
                     {
                         ItemInternalId = item.InternalId,
@@ -153,6 +173,15 @@ namespace TheIntroDB.Services
                 }
                 catch (Exception ex)
                 {
+                    consecutiveApiFailures++;
+                    if (consecutiveApiFailures >= MaxConsecutiveApiFailures)
+                    {
+                        _logger.Error(
+                            "TheIntroDB scan aborting: {0} consecutive failures (API may be down). Skipping remaining {1} items.",
+                            consecutiveApiFailures, itemsToScan.Length - i);
+                        break;
+                    }
+
                     _logger.ErrorException(string.Format(
                         "Error processing item {0}", item.Name), ex);
                 }

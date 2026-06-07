@@ -14,6 +14,7 @@ namespace TheIntroDB.Data
     {
         private readonly ILogger _logger;
         private readonly ReaderWriterLockSlim _lock;
+        private readonly object _connectionLock = new object();
         private readonly string _dbFilePath;
         private IDatabaseConnection _connection;
 
@@ -31,9 +32,12 @@ namespace TheIntroDB.Data
 
         public void Dispose()
         {
-            _lock.Dispose();
-            _connection?.Dispose();
-            _connection = null;
+            lock (_connectionLock)
+            {
+                _lock.Dispose();
+                _connection?.Dispose();
+                _connection = null;
+            }
         }
 
         public bool HasAllSegmentTypes(long itemInternalId, IReadOnlyCollection<MediaSegmentType> types)
@@ -45,24 +49,6 @@ namespace TheIntroDB.Data
 
             var stored = GetStoredSegmentTypes(itemInternalId);
             return types.All(stored.Contains);
-        }
-
-        public bool HasAnySegments(long itemInternalId)
-        {
-            _lock.EnterReadLock();
-            try
-            {
-                var db = GetConnection();
-                using (var stmt = db.PrepareStatement("SELECT 1 FROM MediaSegments WHERE ItemInternalId=@ItemInternalId LIMIT 1"))
-                {
-                    BindInt64(stmt, "@ItemInternalId", itemInternalId);
-                    return stmt.MoveNext();
-                }
-            }
-            finally
-            {
-                _lock.ExitReadLock();
-            }
         }
 
         public HashSet<MediaSegmentType> GetStoredSegmentTypes(long itemInternalId)
@@ -226,9 +212,17 @@ namespace TheIntroDB.Data
                 return _connection;
             }
 
-            var flags = ConnectionFlags.Create | ConnectionFlags.ReadWrite | ConnectionFlags.PrivateCache | ConnectionFlags.NoMutex;
-            _connection = SQLite3.Open(_dbFilePath, flags, null, false);
-            return _connection;
+            lock (_connectionLock)
+            {
+                if (_connection != null)
+                {
+                    return _connection;
+                }
+
+                var flags = ConnectionFlags.Create | ConnectionFlags.ReadWrite | ConnectionFlags.PrivateCache | ConnectionFlags.NoMutex;
+                _connection = SQLite3.Open(_dbFilePath, flags, null, false);
+                return _connection;
+            }
         }
 
         private static void BindInt64(IStatement stmt, string name, long value)

@@ -196,9 +196,12 @@ namespace TheIntroDB.Services
             }
 
             chapters.RemoveAll(c =>
-              c.MarkerType == MarkerType.IntroStart ||
-              c.MarkerType == MarkerType.IntroEnd ||
-              c.MarkerType == MarkerType.CreditsStart ||
+              (c.MarkerType == MarkerType.IntroStart &&
+                string.Equals(c.Name, "Intro", StringComparison.Ordinal)) ||
+              (c.MarkerType == MarkerType.IntroEnd &&
+                string.Equals(c.Name, "Intro End", StringComparison.Ordinal)) ||
+              (c.MarkerType == MarkerType.CreditsStart &&
+                string.Equals(c.Name, "Credits", StringComparison.Ordinal)) ||
               (c.MarkerType == MarkerType.Chapter && c.Name != null &&
                 c.Name.EndsWith(TheIntroDbTag, StringComparison.Ordinal)) ||
               string.Equals(c.Name, "IntroStartMarker",

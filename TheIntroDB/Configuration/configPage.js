@@ -514,13 +514,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 }
 
                 function getSelectedShowIdsFromConfig(config) {
-                    var configuredShowIds = getConfiguredIdList(config.SelectedShowIds);
-
-                    if (config.SelectedShowId) {
-                        configuredShowIds.push(config.SelectedShowId);
-                    }
-
-                    return dedupeIds(configuredShowIds);
+                    return dedupeIds(getConfiguredIdList(config.SelectedShowIds));
                 }
 
                 function getSelectedLibraryIdsFromConfig(config) {
@@ -1093,7 +1087,6 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                             config.ApiKey = apiKeyInput.value || '';
                             config.SelectedLibraryIds = selectedLibraryIds.join(',');
                             config.SelectedShowIds = selectedShowIds.join(',');
-                            config.SelectedShowId = selectedShowIds.length ? selectedShowIds[0] : '';
                             config.EnableIntro = page.querySelector('#EnableIntro').checked;
                             config.EnableRecap = page.querySelector('#EnableRecap').checked;
                             config.EnableCredits = page.querySelector('#EnableCredits').checked;
