@@ -10,7 +10,6 @@ using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Logging;
 using TheIntroDB.Api;
-using TheIntroDB.Configuration;
 using TheIntroDB.Models;
 
 namespace TheIntroDB.Providers
