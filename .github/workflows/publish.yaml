@@ -62,9 +62,9 @@ jobs:
         id: build
         run: |
           dotnet build --configuration Release TheIntroDB/TheIntroDB.csproj
-          ARTIFACT_NAME="theintrodb_${{ steps.version.outputs.version }}.zip"
+          ARTIFACT_NAME="theintrodb_${{ steps.version.outputs.version }}.dll"
           echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
-          zip -j "$ARTIFACT_NAME" TheIntroDB/bin/Release/netstandard2.0/TheIntroDB.dll
+          cp TheIntroDB/bin/Release/netstandard2.0/TheIntroDB.dll "$ARTIFACT_NAME"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -85,7 +85,7 @@ jobs:
 
       - name: Prepare GH Release Assets
         run: |
-          for file in ./*.zip; do
+          for file in ./*.dll; do
             [ -f "$file" ] || continue
             md5sum "${file#./}" > "${file%.*}.md5"
           done
@@ -96,6 +96,6 @@ jobs:
         with:
           tag_name: ${{ needs.build.outputs.tag }}
           files: |
-            *.zip
+            *.dll
             *.md5
           fail_on_unmatched_files: true
