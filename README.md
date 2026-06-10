@@ -14,6 +14,17 @@ This plugin fetches intro, recap, credits, and preview timestamps from [TheIntro
 
 ## Installation
 
+1. Open Emby's WebUI and navigate to the plugin catalog.
+2. Find TheIntroDB under the general plugin section.
+3. Install the latest version!
+4. Restart Emby Server.
+5. Configure the plugin at **Dashboard → Plugins → TheIntroDB**.
+6. Run the scheduled task to populate data: **Dashboard → Scheduled Tasks → TheIntroDB Media Segment Scan** and click the **Play** button (▶).
+
+## Manual Installation
+
+Tip: use [Emby.GitHubRepoPluginInstall](https://github.com/bakes82/Emby.GitHubRepoPluginInstall) to install from GitHub releases directly!
+
 1. Download the latest plugin release from the [Releases](https://github.com/TheIntroDB/emby-plugin/releases) page.
 2. Place `TheIntroDB.dll` into your Emby plugins folder:
    - **Linux:** `/var/lib/emby/plugins/`
@@ -23,7 +34,6 @@ This plugin fetches intro, recap, credits, and preview timestamps from [TheIntro
 4. Configure the plugin at **Dashboard → Plugins → TheIntroDB**.
 5. Run the scheduled task to populate data: **Dashboard → Scheduled Tasks → TheIntroDB Media Segment Scan** and click the **Play** button (▶).
 
-Tip: use [Emby.GitHubRepoPluginInstall](https://github.com/bakes82/Emby.GitHubRepoPluginInstall) to install from releases directly!
 
 ### Metadata Requirements
 
