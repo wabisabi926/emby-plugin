@@ -152,7 +152,9 @@ namespace TheIntroDB.EntryPoints
                 if (!hasRecap)
                 {
                     if (string.Equals(c.Name, "Recap", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Recap End", StringComparison.Ordinal))
+                        string.Equals(c.Name, "Recap End", StringComparison.Ordinal) ||
+                        string.Equals(c.Name, "Recap (TheIntroDB)", StringComparison.Ordinal) ||
+                        string.Equals(c.Name, "Recap End (TheIntroDB)", StringComparison.Ordinal))
                     {
                         hasRecap = true;
                     }
@@ -161,7 +163,9 @@ namespace TheIntroDB.EntryPoints
                 if (!hasPreview)
                 {
                     if (string.Equals(c.Name, "Preview", StringComparison.Ordinal) ||
-                        string.Equals(c.Name, "Preview End", StringComparison.Ordinal))
+                        string.Equals(c.Name, "Preview End", StringComparison.Ordinal) ||
+                        string.Equals(c.Name, "Preview (TheIntroDB)", StringComparison.Ordinal) ||
+                        string.Equals(c.Name, "Preview End (TheIntroDB)", StringComparison.Ordinal))
                     {
                         hasPreview = true;
                     }

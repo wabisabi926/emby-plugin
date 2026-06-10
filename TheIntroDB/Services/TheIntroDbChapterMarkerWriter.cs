@@ -106,6 +106,13 @@ namespace TheIntroDB.Services
             deduped.Sort((a, b) =>
               a.StartPositionTicks.CompareTo(b.StartPositionTicks));
 
+            if (ChapterListsEqual(existing, deduped))
+            {
+                _logger.Debug("TheIntroDB chapters unchanged for {0} ({1}), skipping save",
+                    item.Name, item.InternalId);
+                return 0;
+            }
+
             _itemRepository.SaveChapters(item.InternalId, deduped);
             _logger.Debug("TheIntroDB saved {0} chapters/markers for {1} ({2})",
               deduped.Count, item.Name, item.InternalId);
@@ -251,6 +258,39 @@ namespace TheIntroDB.Services
             }
 
             return list;
+        }
+
+        private static bool ChapterListsEqual(
+          IReadOnlyList<ChapterInfo> a,
+          IReadOnlyList<ChapterInfo> b)
+        {
+            if (a.Count != b.Count)
+            {
+                return false;
+            }
+
+            var keyA = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < a.Count; i++)
+            {
+                keyA.Add(ChapterKey(a[i]));
+            }
+
+            for (int i = 0; i < b.Count; i++)
+            {
+                if (!keyA.Contains(ChapterKey(b[i])))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static string ChapterKey(ChapterInfo c)
+        {
+            return ((int)c.MarkerType).ToString() + ":" +
+                c.StartPositionTicks.ToString() + ":" +
+                (c.Name ?? string.Empty);
         }
     }
 }
