@@ -130,16 +130,16 @@ namespace TheIntroDB.Services
                         continue;
                     }
 
-                    var fetched = await _segmentProvider.GetMediaSegmentsAsync(
+                    var result = await _segmentProvider.GetMediaSegmentsAsync(
                       item.Id, cancellationToken).ConfigureAwait(false);
 
-                    if (fetched == null || fetched.Count == 0)
+                    if (result.IsRateLimited || result.IsError)
                     {
                         consecutiveApiFailures++;
                         if (consecutiveApiFailures >= MaxConsecutiveApiFailures)
                         {
                             _logger.Error(
-                                "TheIntroDB scan aborting: {0} consecutive items returned no segments (API may be down). Skipping remaining {1} items.",
+                                "TheIntroDB scan aborting: {0} consecutive failures (API may be down). Skipping remaining {1} items.",
                                 consecutiveApiFailures, itemsToScan.Length - i);
                             break;
                         }
@@ -149,7 +149,7 @@ namespace TheIntroDB.Services
                         consecutiveApiFailures = 0;
                     }
 
-                    var storedSegments = fetched.Select(s => new StoredMediaSegment
+                    var storedSegments = result.Segments.Select(s => new StoredMediaSegment
                     {
                         ItemInternalId = item.InternalId,
                         Type = s.Type,

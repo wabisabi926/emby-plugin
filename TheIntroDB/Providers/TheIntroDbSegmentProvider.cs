@@ -48,8 +48,8 @@ namespace TheIntroDB.Providers
         /// </summary>
         /// <param name="itemId">The item ID to fetch segments for.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>Collection of segment data or empty if not found.</returns>
-        public async Task<IReadOnlyList<MediaSegmentData>> GetMediaSegmentsAsync(
+        /// <returns>Fetch result with segment data or empty if not found.</returns>
+        public async Task<SegmentFetchResult> GetMediaSegmentsAsync(
           Guid itemId,
           CancellationToken cancellationToken)
         {
@@ -58,7 +58,7 @@ namespace TheIntroDB.Providers
             if (Plugin.Instance is null)
             {
                 _logger.Warn("Early exit: Plugin.Instance is null");
-                return Array.Empty<MediaSegmentData>();
+                return SegmentFetchResult.NotFound();
             }
 
             Plugin.Instance.EnsureConfigurationInitialized();
@@ -67,14 +67,14 @@ namespace TheIntroDB.Providers
             if (config is null)
             {
                 _logger.Warn("Early exit: Plugin configuration is not available");
-                return Array.Empty<MediaSegmentData>();
+                return SegmentFetchResult.NotFound();
             }
 
             var item = _libraryManager.GetItemById(itemId);
             if (item is null)
             {
                 _logger.Warn("Early exit: item not found for ItemId={0}", itemId);
-                return Array.Empty<MediaSegmentData>();
+                return SegmentFetchResult.NotFound();
             }
 
             int? tmdbId = null;
@@ -109,13 +109,13 @@ namespace TheIntroDB.Providers
                   "(null)" :
                   string.Join(",", item.ProviderIds.Select(kvp => kvp.Key + "=" + kvp.Value));
                 _logger.Warn("Early exit: no TmdbId, TvdbId, or ImdbId for {0}. ProviderIds: {1}", item.Name, providers);
-                return Array.Empty<MediaSegmentData>();
+                return SegmentFetchResult.NotFound();
             }
 
             if (!isMovie && (!season.HasValue || !episode.HasValue))
             {
                 _logger.Warn("Early exit: TV episode missing season/episode for {0}", item.Name);
-                return Array.Empty<MediaSegmentData>();
+                return SegmentFetchResult.NotFound();
             }
 
             _logger.Debug("Segment toggles: EnableIntro={0}, EnableRecap={1}, EnableCredits={2}, EnablePreview={3}, IgnoreMediaWithExistingSegments={4}",
@@ -128,13 +128,27 @@ namespace TheIntroDB.Providers
             long? durationMs = item.RunTimeTicks.HasValue && item.RunTimeTicks.Value > 0 ?
               item.RunTimeTicks.Value / TimeSpan.TicksPerMillisecond :
               (long?)null;
-            var media = await client.GetMediaAsync(tmdbId, tvdbId, imdbId, isMovie, season, episode, durationMs, cancellationToken).ConfigureAwait(false);
+            var mediaResult = await client.GetMediaAsync(tmdbId, tvdbId, imdbId, isMovie, season, episode, durationMs, cancellationToken).ConfigureAwait(false);
 
-            if (media is null)
+            if (mediaResult.IsNotFound)
             {
                 _logger.Info("TheIntroDB API returned no data for {0}", item.Name);
-                return Array.Empty<MediaSegmentData>();
+                return SegmentFetchResult.NotFound();
             }
+
+            if (mediaResult.IsRateLimited)
+            {
+                _logger.Warn("TheIntroDB API rate limited for {0}", item.Name);
+                return SegmentFetchResult.RateLimited();
+            }
+
+            if (mediaResult.IsError)
+            {
+                _logger.Error("TheIntroDB API error for {0}", item.Name);
+                return SegmentFetchResult.Error();
+            }
+
+            var media = mediaResult.Response;
 
             long? runTimeTicks = item.RunTimeTicks;
             var segments = new List<MediaSegmentData>();
@@ -185,7 +199,7 @@ namespace TheIntroDB.Providers
               });
 
             _logger.Info("Returning {0} segments for {1}", segments.Count, item.Name);
-            return segments;
+            return SegmentFetchResult.Success(segments);
         }
 
         /// <summary>

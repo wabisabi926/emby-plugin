@@ -32,7 +32,7 @@ namespace TheIntroDB.Api
             _logger = logger;
         }
 
-        public async Task<MediaResponse> GetMediaAsync(
+        public async Task<MediaFetchResult> GetMediaAsync(
             int? tmdbId,
             int? tvdbId,
             string imdbId,
@@ -59,7 +59,7 @@ namespace TheIntroDB.Api
                         ["has_imdb"] = !string.IsNullOrWhiteSpace(imdbId) ? 1 : 0,
                         ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(_plugin.Configuration?.ApiKey) ? 1 : 0
                     });
-                return null;
+                return MediaFetchResult.RateLimited();
             }
 
             var config = _plugin.Configuration ?? new PluginConfiguration();
@@ -73,7 +73,7 @@ namespace TheIntroDB.Api
 
             if (!hasTmdb && !hasTvdb && !hasImdb)
             {
-                return null;
+                return MediaFetchResult.NotFound();
             }
 
             Plugin.TrackAnonymousUsageEvent(
@@ -158,7 +158,7 @@ namespace TheIntroDB.Api
                                     ["has_imdb"] = hasImdb ? 1 : 0,
                                     ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
                                 });
-                            return null;
+                            return MediaFetchResult.RateLimited();
                         }
 
                         if (!response.IsSuccessStatusCode)
@@ -170,6 +170,24 @@ namespace TheIntroDB.Api
                             }
 
                             _logger.Warn("TheIntroDB API error response body: {0}", string.IsNullOrEmpty(body) ? "(empty)" : body);
+
+                            if ((int)response.StatusCode == 404)
+                            {
+                                Plugin.TrackAnonymousUsageEvent(
+                                    "theintrodb_api_media_fetch",
+                                    new Dictionary<string, object>
+                                    {
+                                        ["host"] = "emby",
+                                        ["result"] = "http_404",
+                                        ["media_type"] = isMovie ? "movie" : "episode",
+                                        ["has_tmdb"] = hasTmdb ? 1 : 0,
+                                        ["has_tvdb"] = hasTvdb ? 1 : 0,
+                                        ["has_imdb"] = hasImdb ? 1 : 0,
+                                        ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
+                                    });
+                                return MediaFetchResult.NotFound();
+                            }
+
                             Plugin.TrackAnonymousUsageEvent(
                                 "theintrodb_api_media_fetch",
                                 new Dictionary<string, object>
@@ -183,7 +201,7 @@ namespace TheIntroDB.Api
                                     ["has_imdb"] = hasImdb ? 1 : 0,
                                     ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
                                 });
-                            return null;
+                            return MediaFetchResult.Error();
                         }
 
                         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -225,7 +243,7 @@ namespace TheIntroDB.Api
                                 ["preview_count"] = mediaResponse?.Preview?.Count ?? 0
                             });
 
-                        return mediaResponse;
+                        return MediaFetchResult.Success(mediaResponse);
                     }
                 }
                 catch (Exception ex)
@@ -243,7 +261,7 @@ namespace TheIntroDB.Api
                             ["has_imdb"] = hasImdb ? 1 : 0,
                             ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
                         });
-                    return null;
+                    return MediaFetchResult.Error();
                 }
             }
         }
