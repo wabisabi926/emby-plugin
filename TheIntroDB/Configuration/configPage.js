@@ -564,11 +564,11 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                     element.style.textAlign = 'center';
                     element.style.border = isSelected
                         ? '2px solid rgba(117, 117, 117, 0.85)'
-                        : '1px solid rgba(255, 255, 255, 0.12)';
+                        : '1px solid hsla(var(--theme-text-color-hue, 0), var(--theme-text-color-saturation, 0%), var(--theme-text-color-lightness, 0%), 0.12)';
                     element.style.borderRadius = '0.5em';
                     element.style.background = isSelected
                         ? 'rgba(117, 117, 117, 0.12)'
-                        : 'rgba(255, 255, 255, 0.03)';
+                        : 'hsla(var(--card-background-hue, 0), var(--card-background-saturation, 0%), var(--card-background-lightness, 100%), var(--card-background-alpha, 1))';
                     element.style.cursor = isInteractive ? 'pointer' : 'default';
 
                     var image = document.createElement('img');
