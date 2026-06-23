@@ -206,6 +206,127 @@ namespace TheIntroDB.Services
                 .ToList();
         }
 
+        private static string NormalizeConfiguredId(string raw)
+        {
+            return string.IsNullOrWhiteSpace(raw)
+                ? string.Empty
+                : raw.Replace("-", string.Empty).Trim();
+        }
+
+        private BaseItem ResolveItemByConfiguredId(string configuredId)
+        {
+            if (string.IsNullOrWhiteSpace(configuredId))
+            {
+                return null;
+            }
+
+            if (Guid.TryParse(configuredId.Trim(), out var guid))
+            {
+                return _libraryManager.GetItemById(guid);
+            }
+
+            var normalized = NormalizeConfiguredId(configuredId);
+            return normalized.Length == 32 && Guid.TryParseExact(normalized, "N", out guid)
+                ? _libraryManager.GetItemById(guid)
+                : null;
+        }
+
+        private static bool MatchesConfiguredId(
+            BaseItem item,
+            HashSet<string> configuredIdSet,
+            HashSet<long> resolvedInternalIds)
+        {
+            if (item == null)
+            {
+                return false;
+            }
+
+            return configuredIdSet.Contains(item.Id.ToString("N")) ||
+                   configuredIdSet.Contains(item.InternalId.ToString()) ||
+                   resolvedInternalIds.Contains(item.InternalId);
+        }
+
+        private static bool IsInSelectedLibraries(
+            BaseItem item,
+            HashSet<string> selectedLibraryIdSet,
+            HashSet<long> resolvedLibraryInternalIds)
+        {
+            BaseItem current = item;
+            while (current != null)
+            {
+                if (MatchesConfiguredId(current, selectedLibraryIdSet, resolvedLibraryInternalIds))
+                {
+                    return true;
+                }
+
+                current = current.GetParent();
+            }
+
+            return false;
+        }
+
+        private static bool IsSelectedShowOrMovie(BaseItem item, HashSet<string> selectedShowIdSet)
+        {
+            if (item == null)
+            {
+                return false;
+            }
+
+            if (item is Movie &&
+                (selectedShowIdSet.Contains(item.Id.ToString("N")) ||
+                 selectedShowIdSet.Contains(item.InternalId.ToString())))
+            {
+                return true;
+            }
+
+            BaseItem current = item;
+            while (current != null)
+            {
+                if (current is Series &&
+                    (selectedShowIdSet.Contains(current.Id.ToString("N")) ||
+                     selectedShowIdSet.Contains(current.InternalId.ToString())))
+                {
+                    return true;
+                }
+
+                current = current.GetParent();
+            }
+
+            return false;
+        }
+
+        private BaseItem[] GetItemsScopedToSelectedLibraries(
+            List<string> selectedLibraryIds,
+            HashSet<long> resolvedLibraryInternalIds)
+        {
+            var queryAncestorIds = new HashSet<long>(resolvedLibraryInternalIds);
+
+            foreach (var selectedLibraryId in selectedLibraryIds)
+            {
+                if (long.TryParse(selectedLibraryId, out var internalId))
+                {
+                    queryAncestorIds.Add(internalId);
+                }
+            }
+
+            if (queryAncestorIds.Count == 0)
+            {
+                return Array.Empty<BaseItem>();
+            }
+
+            var scopedItems = _libraryManager.GetItemList(new InternalItemsQuery
+            {
+                AncestorIds = queryAncestorIds.ToArray(),
+                IncludeItemTypes = new[] { "Movie", "Episode" },
+                Recursive = true
+            }) ?? Array.Empty<BaseItem>();
+
+            return scopedItems
+                .GroupBy(item => item.InternalId)
+                .Select(group => group.First())
+                .ToArray();
+        }
+
         private BaseItem[] GetFilteredItems(PluginConfiguration config)
         {
             var selectedLibraryIds = ParseCommaSeparatedIds(config.SelectedLibraryIds);
@@ -216,41 +337,11 @@ namespace TheIntroDB.Services
 
             // Normalize IDs by stripping hyphens so both formats match.
             var libraryIdSet = new HashSet<string>(
-                selectedLibraryIds.Select(id => id.Replace("-", "")),
+                selectedLibraryIds.Select(NormalizeConfiguredId),
                 StringComparer.OrdinalIgnoreCase);
             var showIdSet = new HashSet<string>(
-                selectedShowIds.Select(id => id.Replace("-", "")),
+                selectedShowIds.Select(NormalizeConfiguredId),
                 StringComparer.OrdinalIgnoreCase);
-
-            // ----- Library-only filter: use AncestorIds for efficient query-level filtering -----
-            if (hasLibraryFilter && !hasShowFilter)
-            {
-                var libraries = _libraryManager.GetItemList(new InternalItemsQuery
-                {
-                    IncludeItemTypes = new[] { "CollectionFolder" }
-                }) ?? Array.Empty<BaseItem>();
-
-                var matchingLibraryIds = libraries
-                    .Where(l => libraryIdSet.Contains(l.Id.ToString("N")))
-                    .Select(l => l.InternalId)
-                    .ToArray();
-
-                if (matchingLibraryIds.Length == 0)
-                {
-                    _logger.Warn("TheIntroDB scan: no libraries matched the selected library IDs");
-                    return Array.Empty<BaseItem>();
-                }
-
-                var libraryItems = _libraryManager.GetItemList(new InternalItemsQuery
-                {
-                    IncludeItemTypes = new[] { "Movie", "Episode" },
-                    Recursive = true,
-                    AncestorIds = matchingLibraryIds
-                }) ?? Array.Empty<BaseItem>();
-
-                _logger.Info("TheIntroDB scan: {0} items after library filtering (from {1} total)", libraryItems.Length, libraryItems.Length);
-                return libraryItems;
-            }
 
             // ----- Show-only filter or combined filters: query all items and filter in memory -----
             var query = new InternalItemsQuery
@@ -272,61 +363,71 @@ namespace TheIntroDB.Services
 
             if (!hasShowFilter)
             {
-                // No filters active (library-only was already handled above)
-                return allItems;
+                if (!hasLibraryFilter)
+                {
+                    return allItems;
+                }
             }
 
-            // Resolve selected library GUIDs to CollectionFolder InternalIds
-            // for the combined filter case (library OR show).
-            HashSet<long> libraryInternalIds = null;
+            var resolvedLibraryInternalIds = new HashSet<long>();
             if (hasLibraryFilter)
             {
-                var libraries = _libraryManager.GetItemList(new InternalItemsQuery
+                foreach (var selectedLibraryId in selectedLibraryIds)
                 {
-                    IncludeItemTypes = new[] { "CollectionFolder" }
-                }) ?? Array.Empty<BaseItem>();
+                    if (long.TryParse(selectedLibraryId, out var internalId))
+                    {
+                        resolvedLibraryInternalIds.Add(internalId);
+                    }
 
-                libraryInternalIds = new HashSet<long>(
-                    libraries
-                        .Where(l => libraryIdSet.Contains(l.Id.ToString("N")))
-                        .Select(l => l.InternalId));
+                    var resolvedLibrary = ResolveItemByConfiguredId(selectedLibraryId);
+                    if (resolvedLibrary != null)
+                    {
+                        resolvedLibraryInternalIds.Add(resolvedLibrary.InternalId);
+                    }
+                }
+
+                _logger.Info(
+                    "TheIntroDB scan: resolved {0}/{1} selected library IDs to internal IDs",
+                    resolvedLibraryInternalIds.Count,
+                    selectedLibraryIds.Count);
+            }
+
+            var libraryScopedItems = hasLibraryFilter
+                ? GetItemsScopedToSelectedLibraries(selectedLibraryIds, resolvedLibraryInternalIds)
+                : Array.Empty<BaseItem>();
+
+            if (hasLibraryFilter && !hasShowFilter && libraryScopedItems.Length > 0)
+            {
+                _logger.Info(
+                    "TheIntroDB scan: {0} items returned from selected library scope query",
+                    libraryScopedItems.Length);
+                return libraryScopedItems;
             }
 
             var filteredItems = allItems.Where(item =>
             {
-                if (item == null) return false;
-
-                // Walk the parent chain to check membership
-                BaseItem current = item;
-                while (current != null)
+                if (item == null)
                 {
-                    // Library filter: compare against resolved CollectionFolder InternalIds
-                    if (hasLibraryFilter &&
-                        libraryInternalIds.Contains(current.InternalId))
-                    {
-                        return true;
-                    }
-
-                    if (hasShowFilter && current is Series &&
-                        (showIdSet.Contains(current.Id.ToString("N")) ||
-                         showIdSet.Contains(current.InternalId.ToString())))
-                    {
-                        return true;
-                    }
-
-                    current = current.GetParent();
+                    return false;
                 }
 
-                // Also check if this item itself is a selected movie
-                if (hasShowFilter && item is Movie &&
-                    (showIdSet.Contains(item.Id.ToString("N")) ||
-                     showIdSet.Contains(item.InternalId.ToString())))
+                if (hasLibraryFilter &&
+                    IsInSelectedLibraries(item, libraryIdSet, resolvedLibraryInternalIds))
                 {
                     return true;
                 }
 
-                return false;
+                return hasShowFilter && IsSelectedShowOrMovie(item, showIdSet);
             }).ToArray();
+
+            if (hasLibraryFilter && libraryScopedItems.Length > 0)
+            {
+                filteredItems = filteredItems
+                    .Concat(libraryScopedItems)
+                    .GroupBy(item => item.InternalId)
+                    .Select(group => group.First())
+                    .ToArray();
+            }
 
             _logger.Info("TheIntroDB scan: {0} items after library/show filtering (from {1} total)", filteredItems.Length, allItems.Length);
             return filteredItems;
