@@ -214,7 +214,45 @@ namespace TheIntroDB.Services
             bool hasLibraryFilter = selectedLibraryIds.Count > 0;
             bool hasShowFilter = selectedShowIds.Count > 0;
 
-            // Get all candidate items
+            // Normalize IDs by stripping hyphens so both formats match.
+            var libraryIdSet = new HashSet<string>(
+                selectedLibraryIds.Select(id => id.Replace("-", "")),
+                StringComparer.OrdinalIgnoreCase);
+            var showIdSet = new HashSet<string>(
+                selectedShowIds.Select(id => id.Replace("-", "")),
+                StringComparer.OrdinalIgnoreCase);
+
+            // ----- Library-only filter: use AncestorIds for efficient query-level filtering -----
+            if (hasLibraryFilter && !hasShowFilter)
+            {
+                var libraries = _libraryManager.GetItemList(new InternalItemsQuery
+                {
+                    IncludeItemTypes = new[] { "CollectionFolder" }
+                }) ?? Array.Empty<BaseItem>();
+
+                var matchingLibraryIds = libraries
+                    .Where(l => libraryIdSet.Contains(l.Id.ToString("N")))
+                    .Select(l => l.InternalId)
+                    .ToArray();
+
+                if (matchingLibraryIds.Length == 0)
+                {
+                    _logger.Warn("TheIntroDB scan: no libraries matched the selected library IDs");
+                    return Array.Empty<BaseItem>();
+                }
+
+                var libraryItems = _libraryManager.GetItemList(new InternalItemsQuery
+                {
+                    IncludeItemTypes = new[] { "Movie", "Episode" },
+                    Recursive = true,
+                    AncestorIds = matchingLibraryIds
+                }) ?? Array.Empty<BaseItem>();
+
+                _logger.Info("TheIntroDB scan: {0} items after library filtering (from {1} total)", libraryItems.Length, libraryItems.Length);
+                return libraryItems;
+            }
+
+            // ----- Show-only filter or combined filters: query all items and filter in memory -----
             var query = new InternalItemsQuery
             {
                 IncludeItemTypes = new[] { "Movie", "Episode" },
@@ -232,22 +270,27 @@ namespace TheIntroDB.Services
                 allItems = fallback.Where(i => i is Episode || i is Movie).ToArray();
             }
 
-            // No filters: return all items
-            if (!hasLibraryFilter && !hasShowFilter)
+            if (!hasShowFilter)
             {
+                // No filters active (library-only was already handled above)
                 return allItems;
             }
 
-            // Build string sets of configured IDs for O(1) lookup.
-            // IDs from the Emby API use the "N" format (no hyphens), e.g. "689cccc0e9f99a69e7cba955e10e8ea0",
-            // while Guid.ToString() defaults to "D" format with hyphens.
-            // Normalise by stripping hyphens so both formats match.
-            var libraryIdSet = new HashSet<string>(
-                selectedLibraryIds.Select(id => id.Replace("-", "")),
-                StringComparer.OrdinalIgnoreCase);
-            var showIdSet = new HashSet<string>(
-                selectedShowIds.Select(id => id.Replace("-", "")),
-                StringComparer.OrdinalIgnoreCase);
+            // Resolve selected library GUIDs to CollectionFolder InternalIds
+            // for the combined filter case (library OR show).
+            HashSet<long> libraryInternalIds = null;
+            if (hasLibraryFilter)
+            {
+                var libraries = _libraryManager.GetItemList(new InternalItemsQuery
+                {
+                    IncludeItemTypes = new[] { "CollectionFolder" }
+                }) ?? Array.Empty<BaseItem>();
+
+                libraryInternalIds = new HashSet<long>(
+                    libraries
+                        .Where(l => libraryIdSet.Contains(l.Id.ToString("N")))
+                        .Select(l => l.InternalId));
+            }
 
             var filteredItems = allItems.Where(item =>
             {
@@ -257,9 +300,9 @@ namespace TheIntroDB.Services
                 BaseItem current = item;
                 while (current != null)
                 {
+                    // Library filter: compare against resolved CollectionFolder InternalIds
                     if (hasLibraryFilter &&
-                        (libraryIdSet.Contains(current.Id.ToString("N")) ||
-                         libraryIdSet.Contains(current.InternalId.ToString())))
+                        libraryInternalIds.Contains(current.InternalId))
                     {
                         return true;
                     }
