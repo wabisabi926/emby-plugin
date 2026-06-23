@@ -239,10 +239,15 @@ namespace TheIntroDB.Services
             }
 
             // Build string sets of configured IDs for O(1) lookup.
-            // IDs from the Emby API may be GUIDs or numeric InternalId strings;
-            // we compare against both Id.ToString() and InternalId.ToString().
-            var libraryIdSet = new HashSet<string>(selectedLibraryIds, StringComparer.OrdinalIgnoreCase);
-            var showIdSet = new HashSet<string>(selectedShowIds, StringComparer.OrdinalIgnoreCase);
+            // IDs from the Emby API use the "N" format (no hyphens), e.g. "689cccc0e9f99a69e7cba955e10e8ea0",
+            // while Guid.ToString() defaults to "D" format with hyphens.
+            // Normalise by stripping hyphens so both formats match.
+            var libraryIdSet = new HashSet<string>(
+                selectedLibraryIds.Select(id => id.Replace("-", "")),
+                StringComparer.OrdinalIgnoreCase);
+            var showIdSet = new HashSet<string>(
+                selectedShowIds.Select(id => id.Replace("-", "")),
+                StringComparer.OrdinalIgnoreCase);
 
             var filteredItems = allItems.Where(item =>
             {
@@ -253,14 +258,14 @@ namespace TheIntroDB.Services
                 while (current != null)
                 {
                     if (hasLibraryFilter &&
-                        (libraryIdSet.Contains(current.Id.ToString()) ||
+                        (libraryIdSet.Contains(current.Id.ToString("N")) ||
                          libraryIdSet.Contains(current.InternalId.ToString())))
                     {
                         return true;
                     }
 
                     if (hasShowFilter && current is Series &&
-                        (showIdSet.Contains(current.Id.ToString()) ||
+                        (showIdSet.Contains(current.Id.ToString("N")) ||
                          showIdSet.Contains(current.InternalId.ToString())))
                     {
                         return true;
@@ -271,7 +276,7 @@ namespace TheIntroDB.Services
 
                 // Also check if this item itself is a selected movie
                 if (hasShowFilter && item is Movie &&
-                    (showIdSet.Contains(item.Id.ToString()) ||
+                    (showIdSet.Contains(item.Id.ToString("N")) ||
                      showIdSet.Contains(item.InternalId.ToString())))
                 {
                     return true;
