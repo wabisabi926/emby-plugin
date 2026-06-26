@@ -44,22 +44,15 @@ namespace TheIntroDB.Api
         {
             if (DateTime.UtcNow < Plugin.RateLimitExpiryUtc)
             {
-                _logger.Warn(
-                    "TheIntroDB API rate limit is currently active. Skipping request. The rate limit will reset at {0} UTC.",
-                    Plugin.RateLimitExpiryUtc);
-                Plugin.TrackAnonymousUsageEvent(
-                    "theintrodb_api_media_fetch",
-                    new Dictionary<string, object>
-                    {
-                        ["host"] = "emby",
-                        ["result"] = "local_ratelimit_active",
-                        ["media_type"] = isMovie ? "movie" : "episode",
-                        ["has_tmdb"] = tmdbId.HasValue && tmdbId.Value > 0 ? 1 : 0,
-                        ["has_tvdb"] = tvdbId.HasValue && tvdbId.Value > 0 ? 1 : 0,
-                        ["has_imdb"] = !string.IsNullOrWhiteSpace(imdbId) ? 1 : 0,
-                        ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(_plugin.Configuration?.ApiKey) ? 1 : 0
-                    });
-                return MediaFetchResult.RateLimited();
+                var waitUntil = Plugin.RateLimitExpiryUtc;
+                var delay = waitUntil - DateTime.UtcNow;
+                if (delay > TimeSpan.Zero)
+                {
+                    _logger.Warn(
+                        "TheIntroDB API rate limit is currently active. Waiting {0}s until {1} UTC to retry...",
+                        (int)delay.TotalSeconds, waitUntil);
+                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                }
             }
 
             var config = _plugin.Configuration ?? new PluginConfiguration();
@@ -118,152 +111,173 @@ namespace TheIntroDB.Api
             var requestUri = new Uri(baseUrl + "/media" + query, UriKind.Absolute);
             _logger.Info("TheIntroDB API request: {0}", requestUri);
 
-            using (var request = new HttpRequestMessage(HttpMethod.Get, requestUri))
+            const int maxRetries = 3;
+            for (var attempt = 0; attempt < maxRetries; attempt++)
             {
-                if (!string.IsNullOrWhiteSpace(config.ApiKey))
+                using (var request = new HttpRequestMessage(HttpMethod.Get, requestUri))
                 {
-                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ApiKey.Trim());
-                }
-
-                request.Headers.TryAddWithoutValidation("Accept", "application/json");
-                var version = _plugin.GetType().Assembly.GetName().Version?.ToString() ?? "0.0.0";
-                request.Headers.UserAgent.Clear();
-                request.Headers.UserAgent.Add(new ProductInfoHeaderValue("theintrodb-emby-plugin", version));
-
-                try
-                {
-                    await WaitForRateLimitAsync(cancellationToken).ConfigureAwait(false);
-                    using (var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
+                    if (!string.IsNullOrWhiteSpace(config.ApiKey))
                     {
-                        _logger.Info("TheIntroDB API response: StatusCode={0} for {1}", response.StatusCode, requestUri);
+                        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ApiKey.Trim());
+                    }
 
-                        if ((int)response.StatusCode == 429)
+                    request.Headers.TryAddWithoutValidation("Accept", "application/json");
+                    var version = _plugin.GetType().Assembly.GetName().Version?.ToString() ?? "0.0.0";
+                    request.Headers.UserAgent.Clear();
+                    request.Headers.UserAgent.Add(new ProductInfoHeaderValue("theintrodb-emby-plugin", version));
+
+                    try
+                    {
+                        await WaitForRateLimitAsync(cancellationToken).ConfigureAwait(false);
+                        using (var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
                         {
-                            var retryAfterSeconds = GetRetryAfterSeconds(response.Headers);
-                            Plugin.RateLimitExpiryUtc = DateTime.UtcNow.AddSeconds(retryAfterSeconds);
-                            _logger.Warn(
-                                "TheIntroDB API rate limit exceeded. Will not send requests until {0} UTC. Retry-after: {1}s",
-                                Plugin.RateLimitExpiryUtc,
-                                retryAfterSeconds);
+                            _logger.Info("TheIntroDB API response: StatusCode={0} for {1}", response.StatusCode, requestUri);
 
-                            Plugin.TrackAnonymousUsageEvent(
-                                "theintrodb_api_media_fetch",
-                                new Dictionary<string, object>
-                                {
-                                    ["host"] = "emby",
-                                    ["result"] = "http_429",
-                                    ["media_type"] = isMovie ? "movie" : "episode",
-                                    ["has_tmdb"] = hasTmdb ? 1 : 0,
-                                    ["has_tvdb"] = hasTvdb ? 1 : 0,
-                                    ["has_imdb"] = hasImdb ? 1 : 0,
-                                    ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
-                                });
-                            return MediaFetchResult.RateLimited();
-                        }
-
-                        if (!response.IsSuccessStatusCode)
-                        {
-                            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                            if (!string.IsNullOrEmpty(body) && body.Length > 500)
+                            if ((int)response.StatusCode == 429)
                             {
-                                body = body.Substring(0, 500) + "...";
-                            }
+                                var retryAfterSeconds = GetRetryAfterSeconds(response.Headers);
+                                Plugin.RateLimitExpiryUtc = DateTime.UtcNow.AddSeconds(retryAfterSeconds);
+                                _logger.Warn(
+                                    "TheIntroDB API rate limit exceeded. Retry-after: {0}s (attempt {1}/{2})",
+                                    retryAfterSeconds, attempt + 1, maxRetries);
 
-                            _logger.Warn("TheIntroDB API error response body: {0}", string.IsNullOrEmpty(body) ? "(empty)" : body);
-
-                            if ((int)response.StatusCode == 404)
-                            {
                                 Plugin.TrackAnonymousUsageEvent(
                                     "theintrodb_api_media_fetch",
                                     new Dictionary<string, object>
                                     {
                                         ["host"] = "emby",
-                                        ["result"] = "http_404",
+                                        ["result"] = "http_429",
                                         ["media_type"] = isMovie ? "movie" : "episode",
                                         ["has_tmdb"] = hasTmdb ? 1 : 0,
                                         ["has_tvdb"] = hasTvdb ? 1 : 0,
                                         ["has_imdb"] = hasImdb ? 1 : 0,
                                         ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
                                     });
-                                return MediaFetchResult.NotFound();
+
+                                if (attempt < maxRetries - 1)
+                                {
+                                    var retryDelay = TimeSpan.FromSeconds(retryAfterSeconds);
+                                    _logger.Info("TheIntroDB API retrying after rate limit in {0}s...", retryAfterSeconds);
+                                    await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false);
+                                    continue;
+                                }
+
+                                return MediaFetchResult.RateLimited();
                             }
+
+                            if (!response.IsSuccessStatusCode)
+                            {
+                                var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                                if (!string.IsNullOrEmpty(body) && body.Length > 500)
+                                {
+                                    body = body.Substring(0, 500) + "...";
+                                }
+
+                                _logger.Warn("TheIntroDB API error response body: {0}", string.IsNullOrEmpty(body) ? "(empty)" : body);
+
+                                if ((int)response.StatusCode == 404)
+                                {
+                                    Plugin.TrackAnonymousUsageEvent(
+                                        "theintrodb_api_media_fetch",
+                                        new Dictionary<string, object>
+                                        {
+                                            ["host"] = "emby",
+                                            ["result"] = "http_404",
+                                            ["media_type"] = isMovie ? "movie" : "episode",
+                                            ["has_tmdb"] = hasTmdb ? 1 : 0,
+                                            ["has_tvdb"] = hasTvdb ? 1 : 0,
+                                            ["has_imdb"] = hasImdb ? 1 : 0,
+                                            ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
+                                        });
+                                    return MediaFetchResult.NotFound();
+                                }
+
+                                Plugin.TrackAnonymousUsageEvent(
+                                    "theintrodb_api_media_fetch",
+                                    new Dictionary<string, object>
+                                    {
+                                        ["host"] = "emby",
+                                        ["result"] = "http_error",
+                                        ["status"] = (int)response.StatusCode,
+                                        ["media_type"] = isMovie ? "movie" : "episode",
+                                        ["has_tmdb"] = hasTmdb ? 1 : 0,
+                                        ["has_tvdb"] = hasTvdb ? 1 : 0,
+                                        ["has_imdb"] = hasImdb ? 1 : 0,
+                                        ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
+                                    });
+                                return MediaFetchResult.Error();
+                            }
+
+                            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            var mediaResponse = JsonSerializer.Deserialize<MediaResponse>(json, new JsonSerializerOptions
+                            {
+                                PropertyNameCaseInsensitive = true
+                            });
+
+                            if (mediaResponse == null)
+                            {
+                                var body = json;
+                                if (!string.IsNullOrEmpty(body) && body.Length > 500)
+                                {
+                                    body = body.Substring(0, 500) + "...";
+                                }
+                                _logger.Warn("TheIntroDB API deserialize returned null. Body: {0}", string.IsNullOrEmpty(body) ? "(empty)" : body);
+                            }
+                            _logger.Debug(
+                                "TheIntroDB API parsed response: IntroCount={0}, RecapCount={1}, CreditsCount={2}, PreviewCount={3}",
+                                mediaResponse?.Intro?.Count ?? 0,
+                                mediaResponse?.Recap?.Count ?? 0,
+                                mediaResponse?.Credits?.Count ?? 0,
+                                mediaResponse?.Preview?.Count ?? 0);
 
                             Plugin.TrackAnonymousUsageEvent(
                                 "theintrodb_api_media_fetch",
                                 new Dictionary<string, object>
                                 {
                                     ["host"] = "emby",
-                                    ["result"] = "http_error",
-                                    ["status"] = (int)response.StatusCode,
+                                    ["result"] = mediaResponse == null ? "success_null" : "success",
                                     ["media_type"] = isMovie ? "movie" : "episode",
                                     ["has_tmdb"] = hasTmdb ? 1 : 0,
                                     ["has_tvdb"] = hasTvdb ? 1 : 0,
                                     ["has_imdb"] = hasImdb ? 1 : 0,
-                                    ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
+                                    ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0,
+                                    ["intro_count"] = mediaResponse?.Intro?.Count ?? 0,
+                                    ["recap_count"] = mediaResponse?.Recap?.Count ?? 0,
+                                    ["credits_count"] = mediaResponse?.Credits?.Count ?? 0,
+                                    ["preview_count"] = mediaResponse?.Preview?.Count ?? 0
                                 });
-                            return MediaFetchResult.Error();
+
+                            return MediaFetchResult.Success(mediaResponse);
                         }
-
-                        var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                        var mediaResponse = JsonSerializer.Deserialize<MediaResponse>(json, new JsonSerializerOptions
-                        {
-                            PropertyNameCaseInsensitive = true
-                        });
-
-                        if (mediaResponse == null)
-                        {
-                            var body = json;
-                            if (!string.IsNullOrEmpty(body) && body.Length > 500)
-                            {
-                                body = body.Substring(0, 500) + "...";
-                            }
-                            _logger.Warn("TheIntroDB API deserialize returned null. Body: {0}", string.IsNullOrEmpty(body) ? "(empty)" : body);
-                        }
-                        _logger.Debug(
-                            "TheIntroDB API parsed response: IntroCount={0}, RecapCount={1}, CreditsCount={2}, PreviewCount={3}",
-                            mediaResponse?.Intro?.Count ?? 0,
-                            mediaResponse?.Recap?.Count ?? 0,
-                            mediaResponse?.Credits?.Count ?? 0,
-                            mediaResponse?.Preview?.Count ?? 0);
-
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.ErrorException(string.Format("TheIntroDB API request failed for {0}", requestUri), ex);
                         Plugin.TrackAnonymousUsageEvent(
                             "theintrodb_api_media_fetch",
                             new Dictionary<string, object>
                             {
                                 ["host"] = "emby",
-                                ["result"] = mediaResponse == null ? "success_null" : "success",
+                                ["result"] = "exception",
                                 ["media_type"] = isMovie ? "movie" : "episode",
                                 ["has_tmdb"] = hasTmdb ? 1 : 0,
                                 ["has_tvdb"] = hasTvdb ? 1 : 0,
                                 ["has_imdb"] = hasImdb ? 1 : 0,
-                                ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0,
-                                ["intro_count"] = mediaResponse?.Intro?.Count ?? 0,
-                                ["recap_count"] = mediaResponse?.Recap?.Count ?? 0,
-                                ["credits_count"] = mediaResponse?.Credits?.Count ?? 0,
-                                ["preview_count"] = mediaResponse?.Preview?.Count ?? 0
+                                ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
                             });
 
-                        return MediaFetchResult.Success(mediaResponse);
+                        if (attempt < maxRetries - 1)
+                        {
+                            _logger.Info("TheIntroDB API retrying after exception (attempt {0}/{1})...", attempt + 1, maxRetries);
+                            continue;
+                        }
+
+                        return MediaFetchResult.Error();
                     }
                 }
-                catch (Exception ex)
-                {
-                    _logger.ErrorException(string.Format("TheIntroDB API request failed for {0}", requestUri), ex);
-                    Plugin.TrackAnonymousUsageEvent(
-                        "theintrodb_api_media_fetch",
-                        new Dictionary<string, object>
-                        {
-                            ["host"] = "emby",
-                            ["result"] = "exception",
-                            ["media_type"] = isMovie ? "movie" : "episode",
-                            ["has_tmdb"] = hasTmdb ? 1 : 0,
-                            ["has_tvdb"] = hasTvdb ? 1 : 0,
-                            ["has_imdb"] = hasImdb ? 1 : 0,
-                            ["has_theintrodb_api_key"] = !string.IsNullOrWhiteSpace(config.ApiKey) ? 1 : 0
-                        });
-                    return MediaFetchResult.Error();
-                }
             }
+
+            return MediaFetchResult.Error();
         }
 
         private static int GetRetryAfterSeconds(HttpResponseHeaders headers)
