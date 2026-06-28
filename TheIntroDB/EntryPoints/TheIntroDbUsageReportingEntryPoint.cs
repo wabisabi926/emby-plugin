@@ -2,14 +2,18 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Common.Configuration;
+using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Logging;
 using TheIntroDB.Data;
 using TheIntroDB.Models;
+using TheIntroDB.Providers;
 
 namespace TheIntroDB.EntryPoints
 {
@@ -21,15 +25,18 @@ namespace TheIntroDB.EntryPoints
 
         private readonly ISessionManager _sessionManager;
         private readonly TheIntroDbSegmentRepository _repository;
+        private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
         private readonly ConcurrentDictionary<string, PlaybackState> _states = new ConcurrentDictionary<string, PlaybackState>();
 
         public TheIntroDbUsageReportingEntryPoint(
             ISessionManager sessionManager,
             IApplicationPaths applicationPaths,
+            ILibraryManager libraryManager,
             ILogManager logManager)
         {
             _sessionManager = sessionManager;
+            _libraryManager = libraryManager;
             _logger = Plugin.Instance?.FileLogger ?? logManager.GetLogger("TheIntroDB");
             _repository = new TheIntroDbSegmentRepository(_logger, applicationPaths);
         }
@@ -54,12 +61,14 @@ namespace TheIntroDB.EntryPoints
             });
             _sessionManager.PlaybackProgress += SessionManager_PlaybackProgress;
             _sessionManager.PlaybackStopped += SessionManager_PlaybackStopped;
+            _sessionManager.PlaybackStart += SessionManager_PlaybackStart;
         }
 
         public void Dispose()
         {
             _sessionManager.PlaybackProgress -= SessionManager_PlaybackProgress;
             _sessionManager.PlaybackStopped -= SessionManager_PlaybackStopped;
+            _sessionManager.PlaybackStart -= SessionManager_PlaybackStart;
             _repository.Dispose();
         }
 
@@ -159,6 +168,68 @@ namespace TheIntroDB.EntryPoints
             catch (Exception ex)
             {
                 _logger.Error("Usage reporting playback monitor exception: " + ex.Message);
+            }
+        }
+
+        private void SessionManager_PlaybackStart(object sender, PlaybackProgressEventArgs e)
+        {
+            try
+            {
+                if (e?.Item == null)
+                {
+                    return;
+                }
+
+                var item = e.Item;
+                var config = Plugin.Instance?.Configuration;
+                if (config == null || !config.EnableOnDemandFetch)
+                {
+                    return;
+                }
+
+                var internalId = item.InternalId;
+                var existingSegments = _repository.GetSegments(internalId);
+                if (existingSegments != null && existingSegments.Count > 0)
+                {
+                    return;
+                }
+
+                _logger.Info("On-demand segment fetch triggered (playback_start) for {0} ({1})", item.Name, item.GetType().Name);
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var provider = new TheIntroDbSegmentProvider(_libraryManager, _logger);
+                        var result = await provider.GetMediaSegmentsAsync(item.Id, CancellationToken.None).ConfigureAwait(false);
+
+                        if (result.Segments == null || result.Segments.Count == 0)
+                        {
+                            _logger.Info("On-demand segment fetch (playback_start): no segments returned for {0}", item.Name);
+                            return;
+                        }
+
+                        var storedSegments = result.Segments.Select(s => new StoredMediaSegment
+                        {
+                            ItemInternalId = internalId,
+                            Type = s.Type,
+                            StartTicks = s.StartTicks,
+                            EndTicks = s.EndTicks
+                        }).ToList();
+
+                        _repository.ReplaceSegments(internalId, storedSegments, DateTime.UtcNow);
+
+                        _logger.Info("On-demand segment fetch completed (playback_start) for {0}: {1} segments", item.Name, storedSegments.Count);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error("On-demand segment fetch failed (playback_start) for {0}: {1}", item?.Name ?? "null", ex.Message);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("PlaybackStart handler exception: " + ex.Message);
             }
         }
 

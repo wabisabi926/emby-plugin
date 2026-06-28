@@ -102,6 +102,16 @@ namespace TheIntroDB.Providers
                 _logger.Info("Episode: Name={0}, Series={1}, S{2}E{3}, TmdbId={4}, TvdbId={5}, ImdbId={6}",
                   item.Name, ep.SeriesName, season, episode, tmdbId, tvdbId, imdbId ?? "(none)");
             }
+            else if (item is Video video)
+            {
+                isMovie = false;
+                tmdbId = GetTmdbId(video);
+                tvdbId = GetTvdbId(video);
+                imdbId = GetImdbId(video);
+                season = video.ParentIndexNumber;
+                episode = video.IndexNumber;
+                _logger.Info("Video: Name={0}, TmdbId={1}, TvdbId={2}, ImdbId={3}, Season={4}, Episode={5}", item.Name, tmdbId, tvdbId, imdbId ?? "(none)", season, episode);
+            }
 
             if ((!tmdbId.HasValue || tmdbId.Value <= 0) && (!tvdbId.HasValue || tvdbId.Value <= 0) && string.IsNullOrWhiteSpace(imdbId))
             {
@@ -209,7 +219,7 @@ namespace TheIntroDB.Providers
         /// <returns>True if the item is supported (Movie or Episode).</returns>
         public bool Supports(BaseItem item)
         {
-            var supported = item is Episode || item is Movie;
+            var supported = item is Episode || item is Movie || item is Video;
             _logger.Debug("Supports({0}, {1}): {2}", item?.Name ?? "null", item?.GetType().Name ?? "null", supported);
             return supported;
         }
