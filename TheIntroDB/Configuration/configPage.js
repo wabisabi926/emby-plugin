@@ -955,6 +955,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                                 page.querySelector('#EnableCredits').checked = config.EnableCredits !== false;
                                 page.querySelector('#EnablePreview').checked = config.EnablePreview !== false;
                                 page.querySelector('#IgnoreMediaWithExistingSegments').checked = config.IgnoreMediaWithExistingSegments !== false;
+                                page.querySelector('#EnableOnDemandFetch').checked = config.EnableOnDemandFetch !== false;
                                 page.querySelector('#EnableAnonymousUsageReporting').checked = config.EnableAnonymousUsageReporting !== false;
                                 page.querySelector('#EnableFileLogging').checked = config.EnableFileLogging === true;
                                 if (apiKeyInput.value) {
@@ -1083,6 +1084,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                             config.EnableCredits = page.querySelector('#EnableCredits').checked;
                             config.EnablePreview = page.querySelector('#EnablePreview').checked;
                             config.IgnoreMediaWithExistingSegments = page.querySelector('#IgnoreMediaWithExistingSegments').checked;
+                            config.EnableOnDemandFetch = page.querySelector('#EnableOnDemandFetch').checked;
                             config.EnableAnonymousUsageReporting = page.querySelector('#EnableAnonymousUsageReporting').checked;
                             config.EnableFileLogging = page.querySelector('#EnableFileLogging').checked;
                             return ApiClient.updatePluginConfiguration(pluginUniqueId, config).then(function (result) {

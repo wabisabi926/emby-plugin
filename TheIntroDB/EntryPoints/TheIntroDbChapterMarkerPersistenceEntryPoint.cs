@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Entities;
@@ -13,6 +15,8 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Logging;
 using TheIntroDB.Configuration;
 using TheIntroDB.Data;
+using TheIntroDB.Models;
+using TheIntroDB.Providers;
 using TheIntroDB.Services;
 
 namespace TheIntroDB.EntryPoints
@@ -23,6 +27,7 @@ namespace TheIntroDB.EntryPoints
         private readonly IItemRepository _itemRepository;
         private readonly TheIntroDbSegmentRepository _segmentRepository;
         private readonly TheIntroDbChapterMarkerWriter _chapterWriter;
+        private readonly TheIntroDbSegmentProvider _segmentProvider;
         private readonly ILogger _logger;
 
         private readonly ConcurrentDictionary<long, byte> _writesInProgress = new ConcurrentDictionary<long, byte>();
@@ -38,17 +43,31 @@ namespace TheIntroDB.EntryPoints
             _logger = Plugin.Instance?.FileLogger ?? logManager.GetLogger("TheIntroDB");
             _segmentRepository = new TheIntroDbSegmentRepository(_logger, applicationPaths);
             _chapterWriter = new TheIntroDbChapterMarkerWriter(_itemRepository, _logger);
+            _segmentProvider = new TheIntroDbSegmentProvider(libraryManager, _logger);
         }
 
         public void Run()
         {
             _libraryManager.ItemUpdated += LibraryManager_ItemUpdated;
+            _libraryManager.ItemAdded += LibraryManager_ItemAdded;
         }
 
         public void Dispose()
         {
             _libraryManager.ItemUpdated -= LibraryManager_ItemUpdated;
+            _libraryManager.ItemAdded -= LibraryManager_ItemAdded;
             _segmentRepository.Dispose();
+        }
+
+        private void LibraryManager_ItemAdded(object sender, ItemChangeEventArgs e)
+        {
+            var item = e?.Item;
+            if (item is null)
+            {
+                return;
+            }
+
+            _ = OnDemandFetchAsync(item, "item_added");
         }
 
         private void LibraryManager_ItemUpdated(object sender, ItemChangeEventArgs e)
@@ -77,6 +96,9 @@ namespace TheIntroDB.EntryPoints
                 {
                     return;
                 }
+
+                // Also trigger on-demand fetch for updated items that have no segments yet
+                _ = OnDemandFetchAsync(item, "item_updated");
 
                 _ = Task.Run(() => EnsureMarkersApplied(item, config));
             }
@@ -178,6 +200,55 @@ namespace TheIntroDB.EntryPoints
             }
 
             return !(hasIntro && hasRecap && hasCredits && hasPreview);
+        }
+
+        private async Task OnDemandFetchAsync(BaseItem item, string trigger)
+        {
+            try
+            {
+                var config = Plugin.Instance?.Configuration;
+                if (config == null || !config.EnableOnDemandFetch)
+                {
+                    return;
+                }
+
+                var internalId = item.InternalId;
+
+                // Check if segments already exist
+                var existing = _segmentRepository.GetSegments(internalId);
+                if (existing != null && existing.Count > 0)
+                {
+                    _logger.Debug("On-demand fetch skipped ({0}): segments already exist for {1}", trigger, item.Name);
+                    return;
+                }
+
+                _logger.Info("On-demand segment fetch triggered ({0}) for {1} ({2})", trigger, item.Name, item.GetType().Name);
+
+                var result = await _segmentProvider.GetMediaSegmentsAsync(item.Id, CancellationToken.None).ConfigureAwait(false);
+
+                if (result.Segments == null || result.Segments.Count == 0)
+                {
+                    _logger.Info("On-demand segment fetch ({0}): no segments returned for {1}", trigger, item.Name);
+                    return;
+                }
+
+                var storedSegments = result.Segments.Select(s => new StoredMediaSegment
+                {
+                    ItemInternalId = internalId,
+                    Type = s.Type,
+                    StartTicks = s.StartTicks,
+                    EndTicks = s.EndTicks
+                }).ToList();
+
+                _segmentRepository.ReplaceSegments(internalId, storedSegments, DateTime.UtcNow);
+                _chapterWriter.ApplyMarkers(item, storedSegments, config);
+
+                _logger.Info("On-demand segment fetch completed ({0}) for {1}: {2} segments, markers applied", trigger, item.Name, storedSegments.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("On-demand segment fetch failed ({0}) for {1}: {2}", trigger, item?.Name ?? "null", ex.Message);
+            }
         }
     }
 }

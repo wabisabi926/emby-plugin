@@ -80,5 +80,10 @@ namespace TheIntroDB.Configuration
         /// instead of the main Emby log.
         /// </summary>
         public bool EnableFileLogging { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether to automatically fetch segments for newly added items and on playback start.
+        /// </summary>
+        public bool EnableOnDemandFetch { get; set; } = true;
     }
 }
