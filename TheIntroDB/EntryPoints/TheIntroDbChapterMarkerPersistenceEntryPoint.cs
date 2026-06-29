@@ -30,6 +30,8 @@ namespace TheIntroDB.EntryPoints
         private readonly TheIntroDbSegmentProvider _segmentProvider;
         private readonly ILogger _logger;
 
+        private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+        private readonly ConcurrentDictionary<long, Task> _pendingTasks = new ConcurrentDictionary<long, Task>();
         private readonly ConcurrentDictionary<long, byte> _writesInProgress = new ConcurrentDictionary<long, byte>();
 
         public TheIntroDbChapterMarkerPersistenceEntryPoint(
@@ -56,18 +58,35 @@ namespace TheIntroDB.EntryPoints
         {
             _libraryManager.ItemUpdated -= LibraryManager_ItemUpdated;
             _libraryManager.ItemAdded -= LibraryManager_ItemAdded;
+
+            // Signal in-flight tasks to finish and wait for them (with timeout)
+            _cts.Cancel();
+            try
+            {
+                var snapshot = _pendingTasks.Values.ToArray();
+                if (snapshot.Length > 0)
+                {
+                    Task.WaitAll(snapshot, TimeSpan.FromSeconds(10));
+                }
+            }
+            catch (AggregateException)
+            {
+                // Swallow task exceptions during shutdown — they were already logged
+            }
+
             _segmentRepository.Dispose();
+            _cts.Dispose();
         }
 
         private void LibraryManager_ItemAdded(object sender, ItemChangeEventArgs e)
         {
             var item = e?.Item;
-            if (item is null)
+            if (item is not Episode && item is not Movie)
             {
                 return;
             }
 
-            _ = OnDemandFetchAsync(item, "item_added");
+            _ = TrackTaskAsync(OnDemandFetchAsync(item, "item_added", _cts.Token));
         }
 
         private void LibraryManager_ItemUpdated(object sender, ItemChangeEventArgs e)
@@ -98,9 +117,9 @@ namespace TheIntroDB.EntryPoints
                 }
 
                 // Also trigger on-demand fetch for updated items that have no segments yet
-                _ = OnDemandFetchAsync(item, "item_updated");
+                _ = TrackTaskAsync(OnDemandFetchAsync(item, "item_updated", _cts.Token));
 
-                _ = Task.Run(() => EnsureMarkersApplied(item, config));
+                _ = TrackTaskAsync(Task.Run(() => EnsureMarkersApplied(item, config), _cts.Token));
             }
             catch (Exception ex)
             {
@@ -202,7 +221,7 @@ namespace TheIntroDB.EntryPoints
             return !(hasIntro && hasRecap && hasCredits && hasPreview);
         }
 
-        private async Task OnDemandFetchAsync(BaseItem item, string trigger)
+        private async Task OnDemandFetchAsync(BaseItem item, string trigger, CancellationToken cancellationToken)
         {
             try
             {
@@ -214,40 +233,74 @@ namespace TheIntroDB.EntryPoints
 
                 var internalId = item.InternalId;
 
-                // Check if segments already exist
-                var existing = _segmentRepository.GetSegments(internalId);
-                if (existing != null && existing.Count > 0)
+                // Gate with the same writesInProgress used by EnsureMarkersApplied to
+                // prevent duplicate concurrent processing of the same item
+                if (!_writesInProgress.TryAdd(internalId, 0))
                 {
-                    _logger.Debug("On-demand fetch skipped ({0}): segments already exist for {1}", trigger, item.Name);
+                    _logger.Debug("On-demand fetch skipped ({0}): already processing {1}", trigger, item.Name);
                     return;
                 }
 
-                _logger.Info("On-demand segment fetch triggered ({0}) for {1} ({2})", trigger, item.Name, item.GetType().Name);
-
-                var result = await _segmentProvider.GetMediaSegmentsAsync(item.Id, CancellationToken.None).ConfigureAwait(false);
-
-                if (result.Segments == null || result.Segments.Count == 0)
+                try
                 {
-                    _logger.Info("On-demand segment fetch ({0}): no segments returned for {1}", trigger, item.Name);
-                    return;
+                    // Check if segments already exist (under the gate to avoid races)
+                    var existing = _segmentRepository.GetSegments(internalId);
+                    if (existing != null && existing.Count > 0)
+                    {
+                        _logger.Debug("On-demand fetch skipped ({0}): segments already exist for {1}", trigger, item.Name);
+                        return;
+                    }
+
+                    _logger.Info("On-demand segment fetch triggered ({0}) for {1} ({2})", trigger, item.Name, item.GetType().Name);
+
+                    var result = await _segmentProvider.GetMediaSegmentsAsync(item.Id, cancellationToken).ConfigureAwait(false);
+
+                    if (result.Segments == null || result.Segments.Count == 0)
+                    {
+                        _logger.Info("On-demand segment fetch ({0}): no segments returned for {1}", trigger, item.Name);
+                        return;
+                    }
+
+                    var storedSegments = result.Segments.Select(s => new StoredMediaSegment
+                    {
+                        ItemInternalId = internalId,
+                        Type = s.Type,
+                        StartTicks = s.StartTicks,
+                        EndTicks = s.EndTicks
+                    }).ToList();
+
+                    _segmentRepository.ReplaceSegments(internalId, storedSegments, DateTime.UtcNow);
+                    _chapterWriter.ApplyMarkers(item, storedSegments, config);
+
+                    _logger.Info("On-demand segment fetch completed ({0}) for {1}: {2} segments, markers applied", trigger, item.Name, storedSegments.Count);
                 }
-
-                var storedSegments = result.Segments.Select(s => new StoredMediaSegment
+                finally
                 {
-                    ItemInternalId = internalId,
-                    Type = s.Type,
-                    StartTicks = s.StartTicks,
-                    EndTicks = s.EndTicks
-                }).ToList();
-
-                _segmentRepository.ReplaceSegments(internalId, storedSegments, DateTime.UtcNow);
-                _chapterWriter.ApplyMarkers(item, storedSegments, config);
-
-                _logger.Info("On-demand segment fetch completed ({0}) for {1}: {2} segments, markers applied", trigger, item.Name, storedSegments.Count);
+                    _writesInProgress.TryRemove(internalId, out _);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.Debug("On-demand segment fetch cancelled ({0}) for {1}", trigger, item?.Name ?? "null");
             }
             catch (Exception ex)
             {
                 _logger.Error("On-demand segment fetch failed ({0}) for {1}: {2}", trigger, item?.Name ?? "null", ex.Message);
+            }
+        }
+
+        private async Task TrackTaskAsync(Task task)
+        {
+            // Register the task so Dispose() can wait for it to complete
+            var key = task.Id;
+            _pendingTasks.TryAdd(key, task);
+            try
+            {
+                await task.ConfigureAwait(false);
+            }
+            finally
+            {
+                _pendingTasks.TryRemove(key, out _);
             }
         }
     }

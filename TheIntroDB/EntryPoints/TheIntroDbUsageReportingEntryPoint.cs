@@ -28,6 +28,8 @@ namespace TheIntroDB.EntryPoints
         private readonly ILibraryManager _libraryManager;
         private readonly ILogger _logger;
         private readonly ConcurrentDictionary<string, PlaybackState> _states = new ConcurrentDictionary<string, PlaybackState>();
+        private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+        private readonly ConcurrentDictionary<long, Task> _pendingTasks = new ConcurrentDictionary<long, Task>();
 
         public TheIntroDbUsageReportingEntryPoint(
             ISessionManager sessionManager,
@@ -43,7 +45,7 @@ namespace TheIntroDB.EntryPoints
 
         public void Run()
         {
-            _ = Task.Run(async () =>
+            _ = TrackTaskAsync(Task.Run(async () =>
             {
                 for (var attempt = 0; attempt < 5; attempt++)
                 {
@@ -58,7 +60,7 @@ namespace TheIntroDB.EntryPoints
                         await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
                     }
                 }
-            });
+            }));
             _sessionManager.PlaybackProgress += SessionManager_PlaybackProgress;
             _sessionManager.PlaybackStopped += SessionManager_PlaybackStopped;
             _sessionManager.PlaybackStart += SessionManager_PlaybackStart;
@@ -69,7 +71,24 @@ namespace TheIntroDB.EntryPoints
             _sessionManager.PlaybackProgress -= SessionManager_PlaybackProgress;
             _sessionManager.PlaybackStopped -= SessionManager_PlaybackStopped;
             _sessionManager.PlaybackStart -= SessionManager_PlaybackStart;
+
+            // Signal in-flight tasks to finish and wait for them (with timeout)
+            _cts.Cancel();
+            try
+            {
+                var snapshot = _pendingTasks.Values.ToArray();
+                if (snapshot.Length > 0)
+                {
+                    Task.WaitAll(snapshot, TimeSpan.FromSeconds(10));
+                }
+            }
+            catch (AggregateException)
+            {
+                // Swallow task exceptions during shutdown — they were already logged
+            }
+
             _repository.Dispose();
+            _cts.Dispose();
         }
 
         private void SessionManager_PlaybackStopped(object sender, PlaybackStopEventArgs e)
@@ -196,7 +215,7 @@ namespace TheIntroDB.EntryPoints
 
                 _logger.Info("On-demand segment fetch triggered (playback_start) for {0} ({1})", item.Name, item.GetType().Name);
 
-                _ = Task.Run(async () =>
+                _ = TrackTaskAsync(Task.Run(async () =>
                 {
                     try
                     {
@@ -225,11 +244,25 @@ namespace TheIntroDB.EntryPoints
                     {
                         _logger.Error("On-demand segment fetch failed (playback_start) for {0}: {1}", item?.Name ?? "null", ex.Message);
                     }
-                });
+                }));
             }
             catch (Exception ex)
             {
                 _logger.Error("PlaybackStart handler exception: " + ex.Message);
+            }
+        }
+
+        private async Task TrackTaskAsync(Task task)
+        {
+            var key = task.Id;
+            _pendingTasks.TryAdd(key, task);
+            try
+            {
+                await task.ConfigureAwait(false);
+            }
+            finally
+            {
+                _pendingTasks.TryRemove(key, out _);
             }
         }
 
