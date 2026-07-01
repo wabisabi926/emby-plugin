@@ -7,10 +7,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Logging;
+using TheIntroDB.Configuration;
 using TheIntroDB.Data;
 using TheIntroDB.Models;
 using TheIntroDB.Providers;
@@ -206,6 +209,11 @@ namespace TheIntroDB.EntryPoints
                     return;
                 }
 
+                if (!IsItemAllowedByFilters(item, config))
+                {
+                    return;
+                }
+
                 var internalId = item.InternalId;
                 var existingSegments = _repository.GetSegments(internalId);
                 if (existingSegments != null && existingSegments.Count > 0)
@@ -250,6 +258,73 @@ namespace TheIntroDB.EntryPoints
             {
                 _logger.Error("PlaybackStart handler exception: " + ex.Message);
             }
+        }
+
+        private static bool IsItemAllowedByFilters(BaseItem item, PluginConfiguration config)
+        {
+            var selectedLibraryIds = string.IsNullOrWhiteSpace(config.SelectedLibraryIds)
+                ? new List<string>()
+                : config.SelectedLibraryIds.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(id => id.Trim()).Where(id => id.Length > 0).ToList();
+
+            var selectedShowIds = string.IsNullOrWhiteSpace(config.SelectedShowIds)
+                ? new List<string>()
+                : config.SelectedShowIds.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(id => id.Trim()).Where(id => id.Length > 0).ToList();
+
+            bool hasLibraryFilter = selectedLibraryIds.Count > 0;
+            bool hasShowFilter = selectedShowIds.Count > 0;
+
+            if (!hasLibraryFilter && !hasShowFilter)
+                return true;
+
+            var libraryIdSet = new HashSet<string>(
+                selectedLibraryIds.Select(id => id.Replace("-", string.Empty).Trim()),
+                StringComparer.OrdinalIgnoreCase);
+
+            if (hasLibraryFilter)
+            {
+                BaseItem current = item;
+                while (current != null)
+                {
+                    if (libraryIdSet.Contains(current.Id.ToString("N")) ||
+                        libraryIdSet.Contains(current.InternalId.ToString()))
+                    {
+                        return true;
+                    }
+
+                    current = current.GetParent();
+                }
+            }
+
+            if (hasShowFilter)
+            {
+                var showIdSet = new HashSet<string>(
+                    selectedShowIds.Select(id => id.Replace("-", string.Empty).Trim()),
+                    StringComparer.OrdinalIgnoreCase);
+
+                if (item is Movie &&
+                    (showIdSet.Contains(item.Id.ToString("N")) ||
+                     showIdSet.Contains(item.InternalId.ToString())))
+                {
+                    return true;
+                }
+
+                BaseItem current = item;
+                while (current != null)
+                {
+                    if (current is Series &&
+                        (showIdSet.Contains(current.Id.ToString("N")) ||
+                         showIdSet.Contains(current.InternalId.ToString())))
+                    {
+                        return true;
+                    }
+
+                    current = current.GetParent();
+                }
+            }
+
+            return false;
         }
 
         private async Task TrackTaskAsync(Task task)

@@ -231,6 +231,12 @@ namespace TheIntroDB.EntryPoints
                     return;
                 }
 
+                if (!IsItemAllowedByFilters(item, config))
+                {
+                    _logger.Debug("On-demand fetch skipped ({0}): {1} not in selected libraries/shows", trigger, item.Name);
+                    return;
+                }
+
                 var internalId = item.InternalId;
 
                 // Gate with the same writesInProgress used by EnsureMarkersApplied to
@@ -287,6 +293,75 @@ namespace TheIntroDB.EntryPoints
             {
                 _logger.Error("On-demand segment fetch failed ({0}) for {1}: {2}", trigger, item?.Name ?? "null", ex.Message);
             }
+        }
+
+        private static bool IsItemAllowedByFilters(BaseItem item, PluginConfiguration config)
+        {
+            var selectedLibraryIds = string.IsNullOrWhiteSpace(config.SelectedLibraryIds)
+                ? new List<string>()
+                : config.SelectedLibraryIds.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(id => id.Trim()).Where(id => id.Length > 0).ToList();
+
+            var selectedShowIds = string.IsNullOrWhiteSpace(config.SelectedShowIds)
+                ? new List<string>()
+                : config.SelectedShowIds.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(id => id.Trim()).Where(id => id.Length > 0).ToList();
+
+            bool hasLibraryFilter = selectedLibraryIds.Count > 0;
+            bool hasShowFilter = selectedShowIds.Count > 0;
+
+            if (!hasLibraryFilter && !hasShowFilter)
+                return true;
+
+            var libraryIdSet = new HashSet<string>(
+                selectedLibraryIds.Select(id => id.Replace("-", string.Empty).Trim()),
+                StringComparer.OrdinalIgnoreCase);
+
+            // Check library membership by walking parent chain
+            if (hasLibraryFilter)
+            {
+                BaseItem current = item;
+                while (current != null)
+                {
+                    if (libraryIdSet.Contains(current.Id.ToString("N")) ||
+                        libraryIdSet.Contains(current.InternalId.ToString()))
+                    {
+                        return true;
+                    }
+
+                    current = current.GetParent();
+                }
+            }
+
+            // Check show/movie membership
+            if (hasShowFilter)
+            {
+                var showIdSet = new HashSet<string>(
+                    selectedShowIds.Select(id => id.Replace("-", string.Empty).Trim()),
+                    StringComparer.OrdinalIgnoreCase);
+
+                if (item is Movie &&
+                    (showIdSet.Contains(item.Id.ToString("N")) ||
+                     showIdSet.Contains(item.InternalId.ToString())))
+                {
+                    return true;
+                }
+
+                BaseItem current = item;
+                while (current != null)
+                {
+                    if (current is Series &&
+                        (showIdSet.Contains(current.Id.ToString("N")) ||
+                         showIdSet.Contains(current.InternalId.ToString())))
+                    {
+                        return true;
+                    }
+
+                    current = current.GetParent();
+                }
+            }
+
+            return false;
         }
 
         private async Task TrackTaskAsync(Task task)
