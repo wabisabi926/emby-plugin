@@ -14,6 +14,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 var contentItemsByLibrary = {};
                 var currentBrowseLibraryId = '';
                 var currentBrowseItems = [];
+                var removeMode = false;
                 var apiStats = null;
                 var apiValidationRequestId = 0;
                 var apiValidationTimer = 0;
@@ -36,6 +37,9 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 var showPickerSearchElement = page.querySelector('#ShowPickerSearch');
                 var showPickerStatusElement = page.querySelector('#ShowPickerStatus');
                 var showPickerListElement = page.querySelector('#ShowPickerList');
+                var removeResultOverlay = page.querySelector('#RemoveResultOverlay');
+                var removeResultContent = page.querySelector('#RemoveResultContent');
+                var removeResultSummary = page.querySelector('#RemoveResultSummary');
 
                 function normalizeId(value) {
                     return (value || '').toString().replace(/-/g, '').toLowerCase();
@@ -618,7 +622,12 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                     var browsingLibrary = getLibraryById(currentBrowseLibraryId);
                     var isBrowsingLibrary = !!browsingLibrary;
 
-                    showPickerTitleElement.textContent = isBrowsingLibrary ? getLibraryDisplayLabel(browsingLibrary) : 'Choose Libraries';
+                    if (isBrowsingLibrary) {
+                        showPickerTitleElement.textContent = getLibraryDisplayLabel(browsingLibrary);
+                    } else {
+                        showPickerTitleElement.textContent = removeMode ? 'Choose items to clean up' : 'Choose Libraries';
+                    }
+
                     showPickerBackButton.style.display = isBrowsingLibrary ? 'inline-flex' : 'none';
                     showPickerWhitelistButton.style.display = isBrowsingLibrary ? 'inline-flex' : 'none';
                     showPickerWhitelistButton.textContent = isBrowsingLibrary && isIdSelected(currentBrowseLibraryId, pickerSelectedLibraryIds)
@@ -905,6 +914,7 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 }
 
                 function openShowPicker() {
+                    removeMode = false;
                     showPickerOverlay.style.display = 'flex';
                     showPickerSearchElement.value = '';
                     pickerSelectedLibraryIds = selectedLibraryIds.slice();
@@ -921,9 +931,143 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                     });
                 }
 
+                function openRemoveChapterPicker() {
+                    removeMode = true;
+                    showPickerOverlay.style.display = 'flex';
+                    showPickerSearchElement.value = '';
+                    pickerSelectedLibraryIds = [];
+                    pickerSelectedShowIds = [];
+                    renderPickerHeader();
+                    showPickerStatusElement.textContent = 'Loading libraries...';
+
+                    loadLibraries().then(function () {
+                        showLibraryRoot();
+                        showPickerSearchElement.focus();
+                    }).catch(function () {
+                        showPickerStatusElement.textContent = 'Could not load libraries right now.';
+                        showPickerSearchElement.focus();
+                    });
+                }
+
                 function closeShowPicker() {
                     showPickerOverlay.style.display = 'none';
+                    removeMode = false;
                     showLibraryRoot();
+                }
+
+                function executeRemoveChapters() {
+                    var allIds = [];
+                    var libraryPromises = [];
+
+                    pickerSelectedLibraryIds.forEach(function (libraryId) {
+                        libraryPromises.push(
+                            getJson(ApiClient.getUrl('Users/' + currentUserId + '/Items', {
+                                ParentId: libraryId,
+                                Recursive: true,
+                                IncludeItemTypes: 'Series,Movie',
+                                Fields: 'Id',
+                                EnableTotalRecordCount: false,
+                                Limit: 10000
+                            })).then(function (result) {
+                                var items = (result && (result.Items || result.items)) || [];
+                                items.forEach(function (item) {
+                                    if (item.Id) {
+                                        allIds.push(item.Id);
+                                    }
+                                });
+                            }).catch(function () {
+                            })
+                        );
+                    });
+
+                    pickerSelectedShowIds.forEach(function (id) {
+                        allIds.push(id);
+                    });
+
+                    return Promise.all(libraryPromises).then(function () {
+                        var dedupedIds = dedupeIds(allIds);
+                        if (!dedupedIds.length) {
+                            Dashboard.alert({
+                                message: 'No items selected.',
+                                title: 'Remove Chapters'
+                            });
+                            return;
+                        }
+
+                        Dashboard.showLoadingMsg();
+                        return ApiClient.ajax({
+                            type: 'DELETE',
+                            url: ApiClient.getUrl('TheIntroDB/Segments/Chapters'),
+                            dataType: 'json',
+                            contentType: 'application/json; charset=utf-8',
+                            data: JSON.stringify({ ItemIds: dedupedIds })
+                        }).then(function (response) {
+                            Dashboard.hideLoadingMsg();
+                            closeShowPicker();
+                            showRemoveResults(response);
+                        }).catch(function (error) {
+                            Dashboard.hideLoadingMsg();
+                            var message = 'Unknown error';
+                            if (error && error.response && error.response.responseJSON) {
+                                message = error.response.responseJSON.error || error.response.responseJSON.Error || message;
+                            } else if (error && error.message) {
+                                message = error.message;
+                            }
+                            Dashboard.alert({
+                                message: 'Failed to remove chapters: ' + message,
+                                title: 'Error'
+                            });
+                        });
+                    });
+                }
+
+                function showRemoveResults(response) {
+                    var summaryText = 'Processed ' + (response.TotalItems || 0) + ' items, removed ' + (response.TotalChaptersRemoved || 0) + ' chapters.';
+                    removeResultSummary.textContent = summaryText;
+
+                    removeResultContent.innerHTML = '';
+
+                    var results = response.Results || [];
+                    if (results.length) {
+                        var list = document.createElement('div');
+                        list.style.display = 'flex';
+                        list.style.flexDirection = 'column';
+                        list.style.gap = '0.5em';
+
+                        results.forEach(function (result) {
+                            var row = document.createElement('div');
+                            row.style.display = 'flex';
+                            row.style.justifyContent = 'space-between';
+                            row.style.padding = '0.5em 0.75em';
+                            row.style.border = '1px solid rgba(117, 117, 117, 0.12)';
+                            row.style.borderRadius = '0.35em';
+
+                            var nameEl = document.createElement('span');
+                            nameEl.textContent = result.Name || ('Item ' + result.InternalId);
+
+                            var detailEl = document.createElement('span');
+                            var detailParts = [];
+                            if (result.ChaptersRemoved > 0) {
+                                detailParts.push(result.ChaptersRemoved + ' chapters removed');
+                            } else {
+                                detailParts.push('No chapters to remove');
+                            }
+                            detailParts.push(result.SegmentsCleared ? 'Segments cleared' : '');
+                            detailEl.textContent = detailParts.filter(Boolean).join(', ');
+                            detailEl.style.opacity = '0.7';
+                            detailEl.style.fontSize = '0.9em';
+
+                            row.appendChild(nameEl);
+                            row.appendChild(detailEl);
+                            list.appendChild(row);
+                        });
+
+                        removeResultContent.appendChild(list);
+                    } else {
+                        removeResultContent.textContent = 'No items were processed.';
+                    }
+
+                    removeResultOverlay.style.display = 'flex';
                 }
 
                 function loadConfigPage() {
@@ -978,6 +1122,23 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                         openShowPicker();
                     });
 
+                page.querySelector('#OpenRemoveChapterPicker')
+                    .addEventListener('click', function () {
+                        openRemoveChapterPicker();
+                    });
+
+                page.querySelector('#CloseRemoveResult')
+                    .addEventListener('click', function () {
+                        removeResultOverlay.style.display = 'none';
+                    });
+
+                removeResultOverlay
+                    .addEventListener('click', function (event) {
+                        if (event.target === removeResultOverlay) {
+                            removeResultOverlay.style.display = 'none';
+                        }
+                    });
+
                 page.querySelector('#CloseShowPicker')
                     .addEventListener('click', function () {
                         closeShowPicker();
@@ -985,7 +1146,11 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
 
                 page.querySelector('#DoneShowPicker')
                     .addEventListener('click', function () {
-                        applyPickerSelection();
+                        if (removeMode) {
+                            executeRemoveChapters();
+                        } else {
+                            applyPickerSelection();
+                        }
                     });
 
                 showPickerBackButton

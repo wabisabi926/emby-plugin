@@ -95,6 +95,12 @@
             </div>
 
             <div class="verticalSection">
+                <h3 class="sectionTitle">Remove TheIntroDB Chapters</h3>
+                <div class="fieldDescription">This removes only TheIntroDB-generated chapters (intro start/end, credits, recap, preview) from the selected items' chapter lists. User-created chapters are preserved. Segments stored in the local database are also removed.</div>
+                <button id="OpenRemoveChapterPicker" is="emby-button" type="button" class="raised emby-button">Select items to clean up</button>
+            </div>
+
+            <div class="verticalSection">
                 <h3 class="sectionTitle">Debug</h3>
                 <div class="inputContainer">
                     <label class="inputLabel inputLabelUnfocused" for="DebugInternalId">Item InternalId</label>
@@ -137,6 +143,17 @@
             </div>
             <div id="ShowPickerStatus" class="fieldDescription" style="margin-bottom: 1em;">Loading libraries...</div>
             <div id="ShowPickerList" style="overflow-y: auto; border: 1px solid hsla(var(--theme-text-color-hue, 0), var(--theme-text-color-saturation, 0%), var(--theme-text-color-lightness, 0%), 0.12); border-radius: 0.5em; min-height: 12em; padding: 0.75em;"></div>
+        </div>
+    </div>
+
+    <div id="RemoveResultOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); z-index: 100002; padding: 1.5em; box-sizing: border-box; align-items: center; justify-content: center; overflow-y: auto;">
+        <div style="width: min(680px, calc(100vw - 3rem)); margin: auto; background: hsla(var(--card-background-hue, 0), var(--card-background-saturation, 0%), var(--card-background-lightness, 100%), var(--card-background-alpha, 1)); color: hsla(var(--theme-text-color-hue, 0), var(--theme-text-color-saturation, 0%), var(--theme-text-color-lightness, 0%), var(--theme-text-color-alpha, 1)); border-radius: 0.5em; padding: 1.5em; max-height: calc(100vh - 3rem); display: flex; flex-direction: column; box-sizing: border-box; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);">
+            <div class="sectionTitleContainer flex align-items-center" style="justify-content: space-between;">
+                <h2 class="sectionTitle" style="margin: 0;">Remove Results</h2>
+                <button id="CloseRemoveResult" is="emby-button" type="button" class="raised emby-button">Close</button>
+            </div>
+            <div id="RemoveResultSummary" style="margin-top: 1em; padding: 0.75em; background: rgba(117, 117, 117, 0.06); border-radius: 0.5em;"></div>
+            <div id="RemoveResultContent" style="margin-top: 1em; overflow-y: auto; max-height: 20em;"></div>
         </div>
     </div>
 

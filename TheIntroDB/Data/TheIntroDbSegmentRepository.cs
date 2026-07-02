@@ -137,6 +137,25 @@ namespace TheIntroDB.Data
             }
         }
 
+        public void DeleteSegments(long itemInternalId)
+        {
+            _lock.EnterWriteLock();
+            try
+            {
+                var db = GetConnection();
+                using (var delete = db.PrepareStatement(
+                    "DELETE FROM MediaSegments WHERE ItemInternalId=@ItemInternalId"))
+                {
+                    BindInt64(delete, "@ItemInternalId", itemInternalId);
+                    delete.MoveNext();
+                }
+            }
+            finally
+            {
+                _lock.ExitWriteLock();
+            }
+        }
+
         public void ReplaceSegments(long itemInternalId, IReadOnlyList<StoredMediaSegment> segments, DateTime updatedUtc)
         {
             _lock.EnterWriteLock();

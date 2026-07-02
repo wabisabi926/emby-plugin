@@ -25,6 +25,35 @@ namespace TheIntroDB.Services
             _logger = logger;
         }
 
+        public int RemoveMarkers(BaseItem item)
+        {
+            if (item == null)
+            {
+                return 0;
+            }
+
+            var chapters = _itemRepository.GetChapters(item) ??
+              new List<ChapterInfo>();
+            var beforeCount = chapters.Count;
+
+            RemoveExistingTheIntroDbMarkers(chapters);
+
+            var removedCount = beforeCount - chapters.Count;
+            if (removedCount > 0)
+            {
+                _itemRepository.SaveChapters(item.InternalId, chapters);
+                _logger.Info("TheIntroDB removed {0} chapters/markers from {1} ({2})",
+                    removedCount, item.Name, item.InternalId);
+            }
+            else
+            {
+                _logger.Debug("TheIntroDB no chapters to remove from {0} ({1})",
+                    item.Name, item.InternalId);
+            }
+
+            return removedCount;
+        }
+
         public int ApplyMarkers(BaseItem item, IReadOnlyList<StoredMediaSegment>
           segments, PluginConfiguration config)
         {
