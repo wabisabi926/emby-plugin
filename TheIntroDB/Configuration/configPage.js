@@ -1022,12 +1022,14 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                 }
 
                 function showRemoveResults(response) {
-                    var summaryText = 'Processed ' + (response.TotalItems || 0) + ' items, removed ' + (response.TotalChaptersRemoved || 0) + ' chapters.';
+                    var totalItems = response.TotalItems || response.totalItems || 0;
+                    var totalChaptersRemoved = response.TotalChaptersRemoved || response.totalChaptersRemoved || 0;
+                    var summaryText = 'Processed ' + totalItems + ' items, removed ' + totalChaptersRemoved + ' chapters.';
                     removeResultSummary.textContent = summaryText;
 
                     removeResultContent.innerHTML = '';
 
-                    var results = response.Results || [];
+                    var results = response.Results || response.results || [];
                     if (results.length) {
                         var list = document.createElement('div');
                         list.style.display = 'flex';
@@ -1042,17 +1044,21 @@ define(["emby-input", "emby-button", "emby-checkbox"], function () {
                             row.style.border = '1px solid rgba(117, 117, 117, 0.12)';
                             row.style.borderRadius = '0.35em';
 
+                            var name = result.Name || result.name || ('Item ' + (result.InternalId || result.internalId));
+                            var chaptersRemoved = result.ChaptersRemoved || result.chaptersRemoved || 0;
+                            var segmentsCleared = result.SegmentsCleared || result.segmentsCleared || false;
+
                             var nameEl = document.createElement('span');
-                            nameEl.textContent = result.Name || ('Item ' + result.InternalId);
+                            nameEl.textContent = name;
 
                             var detailEl = document.createElement('span');
                             var detailParts = [];
-                            if (result.ChaptersRemoved > 0) {
-                                detailParts.push(result.ChaptersRemoved + ' chapters removed');
+                            if (chaptersRemoved > 0) {
+                                detailParts.push(chaptersRemoved + ' chapters removed');
                             } else {
                                 detailParts.push('No chapters to remove');
                             }
-                            detailParts.push(result.SegmentsCleared ? 'Segments cleared' : '');
+                            detailParts.push(segmentsCleared ? 'Segments cleared' : '');
                             detailEl.textContent = detailParts.filter(Boolean).join(', ');
                             detailEl.style.opacity = '0.7';
                             detailEl.style.fontSize = '0.9em';
